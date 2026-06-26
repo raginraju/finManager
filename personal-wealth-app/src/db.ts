@@ -2,25 +2,27 @@ import Dexie, { type Table } from 'dexie';
 
 export interface IncomeSource {
   id?: number;
+  monthYear: string; 
   name: string;
-  grossAmount: number;
-  cpfEmployeeAmount: number;
-  netTakeHome: number;
+  grossAmount: number; // Represents direct take-home/cash inflow
+  netTakeHome: number; 
   updatedAt: Date;
 }
 
 export interface Expense {
   id?: number;
+  monthYear: string; 
   description: string;
   amount: number;
   date: string; 
-  category: string; 
+  category: string;
   isFixed: boolean;
 }
 
 export interface DebtLiability {
   id?: number;
-  name: string; 
+  monthYear: string; 
+  name: string;
   totalBalance: number;
   monthlyPayment: number;
   isFixedInstallment: boolean;
@@ -34,10 +36,10 @@ class WealthDatabase extends Dexie {
 
   constructor() {
     super('WealthDatabase');
-    this.version(1).stores({
-      income: '++id, name',
-      expenses: '++id, date, category, isFixed',
-      debts: '++id, name, isFixedInstallment',
+    this.version(3).stores({
+      income: '++id, monthYear, name',
+      expenses: '++id, monthYear, date, category, isFixed',
+      debts: '++id, monthYear, name, isFixedInstallment',
     });
   }
 }

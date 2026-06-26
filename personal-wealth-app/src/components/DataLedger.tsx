@@ -1,0 +1,104 @@
+import { useWealthStore } from '../useWealthStore';
+import { db } from '../db';
+
+export function DataLedger() {
+  const { income, expenses, debts, selectedMonthYear, fetchInitialData, syncWithCloud } = useWealthStore();
+
+  // Filter items strictly tied to the active timeframe
+  const currentIncome = income.filter((i) => i.monthYear === selectedMonthYear);
+  const currentExpenses = expenses.filter((e) => e.monthYear === selectedMonthYear);
+  const currentDebts = debts.filter((d) => d.monthYear === selectedMonthYear);
+
+  const handleDelete = async (table: 'income' | 'expenses' | 'debts', id: number | undefined) => {
+    if (!id) return;
+    
+    // 1. Delete from IndexedDB directly
+    await db[table].delete(id);
+    
+    // 2. Pull fresh data into Zustand memory to recalculate charts
+    await fetchInitialData();
+    
+    // 3. Sync the deletion upstream to Google Drive
+    await syncWithCloud();
+  };
+
+  const hasData = currentIncome.length > 0 || currentExpenses.length > 0 || currentDebts.length > 0;
+
+  if (!hasData) return null;
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/20 shadow-sm overflow-hidden w-full">
+      <div className="p-4 border-b border-zinc-800 bg-zinc-900/40">
+        <h3 className="text-xs font-semibold tracking-wider text-zinc-200 uppercase">Itemized Statement Ledger</h3>
+      </div>
+      
+      <div className="divide-y divide-zinc-800 font-sans text-xs">
+        {/* Income Items */}
+        {currentIncome.map((item) => (
+          <div key={`inc-${item.id}`} className="flex items-center justify-between p-3 hover:bg-zinc-900/40 transition-colors">
+            <div className="flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">INCOME</span>
+              <span className="text-zinc-200 font-medium">{item.name}</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-emerald-400 font-medium">+${item.grossAmount.toFixed(2)}</span>
+              <button 
+                onClick={() => handleDelete('income', item.id)}
+                className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                title="Remove Item"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* Debt Liability Items */}
+        {currentDebts.map((item) => (
+          <div key={`debt-${item.id}`} className="flex items-center justify-between p-3 hover:bg-zinc-900/40 transition-colors">
+            <div className="flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">LIABILITY</span>
+              <span className="text-zinc-200 font-medium">{item.name}</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-red-400 font-medium">-${item.monthlyPayment.toFixed(2)}</span>
+              <button 
+                onClick={() => handleDelete('debts', item.id)}
+                className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                title="Remove Item"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* Expense Outflow Items */}
+        {currentExpenses.map((item) => (
+          <div key={`exp-${item.id}`} className="flex items-center justify-between p-3 hover:bg-zinc-900/40 transition-colors">
+            <div className="flex items-center gap-2">
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                item.isFixed 
+                  ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' 
+                  : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+              }`}>
+                {item.isFixed ? 'FIXED BILL' : item.category.toUpperCase()}
+              </span>
+              <span className="text-zinc-200 font-medium">{item.description}</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-zinc-300 font-medium">-${item.amount.toFixed(2)}</span>
+              <button 
+                onClick={() => handleDelete('expenses', item.id)}
+                className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                title="Remove Item"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

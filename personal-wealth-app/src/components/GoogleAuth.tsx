@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useWealthStore } from '../useWealthStore';
 
 // Declare the global google object so TypeScript doesn't complain
 declare global {
@@ -8,21 +8,27 @@ declare global {
 }
 
 export function GoogleAuth() {
-  const [token, setToken] = useState<string | null>(null);
+  // Pull actions and reactive token state from our Zustand engine
+  const setGDriveToken = useWealthStore((state) => state.setGDriveToken);
+  const syncWithCloud = useWealthStore((state) => state.syncWithCloud);
+  const token = useWealthStore((state) => state.gdriveToken);
 
   const handleLogin = () => {
     // Initialize the Google Token Client
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
       scope: 'https://www.googleapis.com/auth/drive.file', // Strict sandbox scope
-      callback: (response: any) => {
+      callback: async (response: any) => {
         if (response.error !== undefined) {
           console.error('Login Failed:', response);
           throw response;
         }
-        // Success! We have the token needed to talk to Google Drive
-        console.log('Access Token acquired!', response.access_token);
-        setToken(response.access_token);
+        
+        // 1. Commit token to global Zustand state engine
+        setGDriveToken(response.access_token);
+        
+        // 2. Instantly execute an initial sync verification scan
+        await syncWithCloud();
       },
     });
 
@@ -31,21 +37,21 @@ export function GoogleAuth() {
   };
 
   return (
-    <div className="flex flex-col items-start gap-4 p-4 border border-zinc-800 rounded-xl bg-zinc-900/50">
-      <h3 className="text-lg font-semibold text-zinc-100">Cloud Sync</h3>
-      <p className="text-sm text-zinc-400">
-        Securely backup your encrypted local data to your personal Google Drive.
+    <div className="flex flex-col items-start gap-4 p-4 border border-zinc-800 rounded-xl bg-zinc-900/50 w-full">
+      <h3 className="text-sm font-semibold text-zinc-200 tracking-wide uppercase">Cloud Backup</h3>
+      <p className="text-xs text-zinc-400 leading-relaxed">
+        Securely backup your dynamic local financial data to your personal Google Drive sandbox.
       </p>
       
       {!token ? (
         <button
           onClick={handleLogin}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+          className="px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors cursor-pointer"
         >
           Authenticate with Google
         </button>
       ) : (
-        <div className="px-4 py-2 text-sm font-medium text-emerald-400 bg-emerald-400/10 rounded-md border border-emerald-400/20">
+        <div className="px-4 py-2 text-xs font-medium text-emerald-400 bg-emerald-500/10 rounded-md border border-emerald-500/20 shadow-sm animate-fade-in">
           ✓ Connected to Google Drive
         </div>
       )}
