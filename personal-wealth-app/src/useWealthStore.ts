@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { db, type IncomeSource, type Expense, type DebtLiability } from './db';
-import { findDataFile, createDataFile, updateDataFile } from './gdriveService';
+import { findDataFile, downloadDataFile, createDataFile, updateDataFile } from './gdriveService';
 
 interface WealthState {
   income: IncomeSource[];
@@ -130,7 +130,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
     },
 
     addExpense: async (expense) => {
-      const id = await db.expenses.add(expense);
+      await db.expenses.add(expense);
       const updatedExpenses = await db.expenses.toArray();
       set((state) => ({
         expenses: updatedExpenses,
