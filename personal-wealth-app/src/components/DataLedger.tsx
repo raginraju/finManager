@@ -1,6 +1,6 @@
 import { useWealthStore } from '../useWealthStore';
 import { db } from '../db';
-import { triggerHaptic } from '../util/haptics';
+import { PRESSABLE_SOFT_CLASS } from '../util/pressable';
 
 export function DataLedger() {
   const { income, expenses, debts, selectedMonthYear, fetchInitialData, syncWithCloud } = useWealthStore();
@@ -12,7 +12,6 @@ export function DataLedger() {
 
   const handleDelete = async (table: 'income' | 'expenses' | 'debts', id: number | undefined) => {
     if (!id) return;
-    triggerHaptic('heavy');
 
     await db[table].delete(id);
     await fetchInitialData();
@@ -41,7 +40,7 @@ export function DataLedger() {
               <span className="text-emerald-400 font-medium">+${item.grossAmount.toFixed(2)}</span>
               <button 
                 onClick={() => handleDelete('income', item.id)}
-                className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                className={`text-zinc-500 hover:text-red-400 p-1 cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
                 title="Remove Item"
               >
                 ✕
@@ -61,7 +60,7 @@ export function DataLedger() {
               <span className="text-red-400 font-medium">-${item.monthlyPayment.toFixed(2)}</span>
               <button 
                 onClick={() => handleDelete('debts', item.id)}
-                className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                className={`text-zinc-500 hover:text-red-400 p-1 cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
                 title="Remove Item"
               >
                 ✕
@@ -87,7 +86,7 @@ export function DataLedger() {
               <span className="text-zinc-300 font-medium">-${item.amount.toFixed(2)}</span>
               <button 
                 onClick={() => handleDelete('expenses', item.id)}
-                className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                className={`text-zinc-500 hover:text-red-400 p-1 cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
                 title="Remove Item"
               >
                 ✕

@@ -1,4 +1,4 @@
-import { triggerHaptic } from '../util/haptics';
+import { PRESSABLE_CLASS } from '../util/pressable';
 
 interface PurgeModalProps {
   isOpen: boolean;
@@ -45,20 +45,18 @@ export function PurgeModal({
         <div className="flex gap-2 pt-2">
           <button
             onClick={() => {
-              triggerHaptic('light');
               onCancel();
             }}
-            className="flex-1 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition-colors cursor-pointer"
+            className={`flex-1 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium ${PRESSABLE_CLASS} cursor-pointer`}
           >
             Cancel
           </button>
           <button
             disabled={!isConfirmed}
             onClick={() => {
-              triggerHaptic('heavy');
               void onConfirm();
             }}
-            className={`flex-1 py-2 rounded-md text-xs font-medium transition-all select-none ${isConfirmed
+            className={`flex-1 py-2 rounded-md text-xs font-medium ${PRESSABLE_CLASS} select-none ${isConfirmed
               ? 'bg-red-600 hover:bg-red-500 text-white cursor-pointer shadow-sm shadow-red-900/20'
               : 'bg-zinc-800/40 text-zinc-600 cursor-not-allowed border border-transparent'
               }`}

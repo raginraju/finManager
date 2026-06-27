@@ -9,6 +9,7 @@ import { DataLedger } from './components/DataLedger';
 import { SyncToast } from './components/SyncToast';
 import { PurgeModal } from './components/PurgeModal';
 import { UndoSnackbar } from './components/UndoSnackbar';
+import { PRESSABLE_SOFT_CLASS } from './util/pressable';
 
 function App() {
   const {
@@ -106,7 +107,7 @@ function App() {
       <footer className="w-full border-t border-zinc-900 py-6 px-8 text-center bg-zinc-950">
         <button
           onClick={() => setIsModalOpen(true)}
-          className="text-[11px] font-medium text-zinc-600 hover:text-red-400/80 transition-colors tracking-wide uppercase cursor-pointer"
+          className={`text-[11px] font-medium text-zinc-600 hover:text-red-400/80 tracking-wide uppercase cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
         >
           Destructive System Operations & Purge Control
         </button>

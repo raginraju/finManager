@@ -1,5 +1,5 @@
 import { useWealthStore } from '../useWealthStore';
-import { triggerHaptic } from '../util/haptics';
+import { PRESSABLE_CLASS } from '../util/pressable';
 
 // Declare the global google object so TypeScript doesn't complain
 declare global {
@@ -15,8 +15,6 @@ export function GoogleAuth() {
   const token = useWealthStore((state) => state.gdriveToken);
 
   const handleLogin = () => {
-    triggerHaptic('medium');
-
     // Initialize the Google Token Client
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
@@ -24,7 +22,6 @@ export function GoogleAuth() {
       callback: async (response: any) => {
         if (response.error !== undefined) {
           console.error('Login Failed:', response);
-          triggerHaptic('error');
           throw response;
         }
         
@@ -33,7 +30,6 @@ export function GoogleAuth() {
 
         // 2. Instantly hydrate from cloud (shows loading overlay until done)
         if (hydrateFromCloud) await hydrateFromCloud();
-        triggerHaptic('success');
       },
     });
 
@@ -53,7 +49,7 @@ export function GoogleAuth() {
       {!isConnected ? (
         <button
           onClick={handleLogin}
-          className="px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors cursor-pointer"
+          className={`px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md ${PRESSABLE_CLASS} cursor-pointer`}
         >
           Authenticate with Google
         </button>
@@ -75,21 +71,17 @@ export function GoogleAuthButton({ className }: GoogleAuthButtonProps) {
   const syncWithCloud = useWealthStore((state) => state.syncWithCloud);
 
   const handleLogin = () => {
-    triggerHaptic('medium');
-
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
       scope: 'https://www.googleapis.com/auth/drive.file',
       callback: async (response: any) => {
         if (response.error !== undefined) {
           console.error('Login Failed:', response);
-          triggerHaptic('error');
           throw response;
         }
 
         setGDriveToken(response.access_token);
         await syncWithCloud();
-        triggerHaptic('success');
       },
     });
 
@@ -99,7 +91,7 @@ export function GoogleAuthButton({ className }: GoogleAuthButtonProps) {
   return (
     <button
       onClick={handleLogin}
-      className={className ?? 'px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors cursor-pointer'}
+      className={className ?? `px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md ${PRESSABLE_CLASS} cursor-pointer`}
     >
       Authenticate with Google
     </button>

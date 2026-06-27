@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useWealthStore } from '../useWealthStore';
-import { triggerHaptic } from '../util/haptics';
+import { PRESSABLE_CLASS } from '../util/pressable';
 
 export function DataEntryForms() {
   const selectedMonthYear = useWealthStore((state) => state.selectedMonthYear);
@@ -23,7 +23,6 @@ export function DataEntryForms() {
   const handleIncomeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!incName || !incAmount) return;
-    triggerHaptic('medium');
     const amount = parseFloat(incAmount);
 
     await upsertIncome({
@@ -40,7 +39,6 @@ export function DataEntryForms() {
   const handleExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expDesc || !expAmount) return;
-    triggerHaptic('medium');
     await addExpense({
       monthYear: selectedMonthYear,
       description: expDesc,
@@ -56,7 +54,6 @@ export function DataEntryForms() {
   const handleDebtSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!debtName || !debtMonthly) return;
-    triggerHaptic('medium');
     await upsertDebt({
       monthYear: selectedMonthYear,
       name: debtName,
@@ -88,7 +85,7 @@ export function DataEntryForms() {
             placeholder="Amount ($)"
             className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
           />
-          <button type="submit" className="w-full py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-sm">
+          <button type="submit" className={`w-full py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 rounded-md text-xs font-medium ${PRESSABLE_CLASS} cursor-pointer shadow-sm`}>
             Commit Cash Inflow
           </button>
         </form>
@@ -124,7 +121,7 @@ export function DataEntryForms() {
             <input type="checkbox" checked={expIsFixed} onChange={(e) => setExpIsFixed(e.target.checked)} className="rounded bg-zinc-950 border-zinc-800 text-zinc-100 focus:ring-0" />
             Recurring Fixed Outflow
           </label>
-          <button type="submit" className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md text-xs font-medium transition-colors cursor-pointer border border-zinc-700">
+          <button type="submit" className={`w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md text-xs font-medium ${PRESSABLE_CLASS} cursor-pointer border border-zinc-700`}>
             Log Transaction
           </button>
         </form>
@@ -148,7 +145,7 @@ export function DataEntryForms() {
             placeholder="Monthly Payment ($)"
             className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
           />
-          <button type="submit" className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md text-xs font-medium transition-colors cursor-pointer border border-zinc-700">
+          <button type="submit" className={`w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md text-xs font-medium ${PRESSABLE_CLASS} cursor-pointer border border-zinc-700`}>
             Commit Installment Line
           </button>
         </form>
