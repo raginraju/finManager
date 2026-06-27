@@ -8,6 +8,7 @@ import { DataEntryForms } from './components/DataEntryForms';
 import { DataLedger } from './components/DataLedger';
 import { SyncToast } from './components/SyncToast';
 import { PurgeModal } from './components/PurgeModal';
+import { UndoSnackbar } from './components/UndoSnackbar';
 
 function App() {
   const {
@@ -18,6 +19,7 @@ function App() {
     selectedMonthYear,
     setSelectedMonthYear,
     addMonthYear,
+    deleteMonthYear,
     clearAllData,
     gdriveToken
   } = useWealthStore();
@@ -87,6 +89,7 @@ function App() {
             onSelectMonth={setSelectedMonthYear}
             onAddMonth={(monthYear) => addMonthYear(monthYear, false)}
             onCopyPrevious={(monthYear) => addMonthYear(monthYear, true)}
+            onDeleteMonth={(monthYear) => deleteMonthYear(monthYear)}
           />
 
           {/* Core Dashboards Tier */}
@@ -123,6 +126,7 @@ function App() {
       
       {/* Global Non-Disturbing Toast Notification Container */}
       <SyncToast /> {/* <-- Mount it here */}
+      <UndoSnackbar />
     </div>
   );
 }

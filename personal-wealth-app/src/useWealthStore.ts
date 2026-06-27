@@ -19,6 +19,16 @@ interface WealthState {
   addMonthYear: (monthYear: string, copyFromPrevious?: boolean) => Promise<void>;
   hydrateFromCloud: () => Promise<void>;
   setGDriveToken: (token: string | null) => void;
+  deleteMonthYear: (monthYear: string) => Promise<void>;
+  lastDeletedSnapshot: null | {
+    monthYear: string;
+    income: IncomeSource[];
+    expenses: Expense[];
+    debts: DebtLiability[];
+    markerExists: boolean;
+    expiresAt: number;
+  };
+  undoDeleteMonthYear: () => Promise<void>;
   syncWithCloud: () => Promise<void>;
   clearAllData: () => Promise<void>;
 
@@ -81,6 +91,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
     expenses: [],
     debts: [],
     monthMarkers: [],
+    lastDeletedSnapshot: null,
     isLoading: true,
     gdriveToken: null,
     selectedMonthYear: getNowString(),
@@ -190,6 +201,109 @@ export const useWealthStore = create<WealthState>((set, get) => {
       }));
 
       get().syncWithCloud();
+    },
+
+    deleteMonthYear: async (monthYear) => {
+      // Soft delete with undo snapshot: capture current records, remove them, and store a snapshot with expiry
+      try {
+        const [markerEntry, incomeToDelete, expensesToDelete, debtsToDelete] = await Promise.all([
+          db.monthMarkers.get(monthYear),
+          db.income.where('monthYear').equals(monthYear).toArray(),
+          db.expenses.where('monthYear').equals(monthYear).toArray(),
+          db.debts.where('monthYear').equals(monthYear).toArray(),
+        ]);
+
+        const snapshot = {
+          monthYear,
+          income: incomeToDelete,
+          expenses: expensesToDelete,
+          debts: debtsToDelete,
+          markerExists: Boolean(markerEntry),
+          expiresAt: Date.now() + 10000, // 10s to undo
+        };
+
+        // perform deletes
+        await Promise.all([
+          db.monthMarkers.delete(monthYear),
+          db.income.where('monthYear').equals(monthYear).delete(),
+          db.expenses.where('monthYear').equals(monthYear).delete(),
+          db.debts.where('monthYear').equals(monthYear).delete(),
+        ]);
+
+        const [income, expenses, debts, monthMarkers] = await Promise.all([
+          db.income.toArray(),
+          db.expenses.toArray(),
+          db.debts.toArray(),
+          db.monthMarkers.toArray(),
+        ]);
+        const markerMonths = monthMarkers.map((entry) => entry.monthYear);
+        const months = recalculateAvailableMonths(income, expenses, debts, markerMonths);
+
+        set({
+          income,
+          expenses,
+          debts,
+          monthMarkers: markerMonths,
+          availableMonths: months,
+          selectedMonthYear: months[0] ?? getNowString(),
+          lastDeletedSnapshot: snapshot,
+        });
+
+        // clear snapshot after expiry
+        setTimeout(() => {
+          if (get().lastDeletedSnapshot && get().lastDeletedSnapshot!.expiresAt <= Date.now()) {
+            set({ lastDeletedSnapshot: null });
+          }
+        }, 10000 + 100); // small buffer
+
+        get().syncWithCloud();
+      } catch (err) {
+        console.error('Failed to delete month:', err);
+      }
+    },
+
+    undoDeleteMonthYear: async () => {
+      const snapshot = get().lastDeletedSnapshot;
+      if (!snapshot) return;
+
+      try {
+        // restore marker if needed
+        if (snapshot.markerExists) {
+          await db.monthMarkers.put({ monthYear: snapshot.monthYear });
+        }
+
+        if (snapshot.income.length) {
+          await db.income.bulkAdd(snapshot.income.map(({ id: _id, ...rest }) => rest));
+        }
+        if (snapshot.expenses.length) {
+          await db.expenses.bulkAdd(snapshot.expenses.map(({ id: _id, ...rest }) => rest));
+        }
+        if (snapshot.debts.length) {
+          await db.debts.bulkAdd(snapshot.debts.map(({ id: _id, ...rest }) => rest));
+        }
+
+        const [income, expenses, debts, monthMarkers] = await Promise.all([
+          db.income.toArray(),
+          db.expenses.toArray(),
+          db.debts.toArray(),
+          db.monthMarkers.toArray(),
+        ]);
+        const markerMonths = monthMarkers.map((entry) => entry.monthYear);
+
+        set({
+          income,
+          expenses,
+          debts,
+          monthMarkers: markerMonths,
+          availableMonths: recalculateAvailableMonths(income, expenses, debts, markerMonths),
+          selectedMonthYear: snapshot.monthYear,
+          lastDeletedSnapshot: null,
+        });
+
+        get().syncWithCloud();
+      } catch (err) {
+        console.error('Failed to undo delete month:', err);
+      }
     },
 
     setGDriveToken: (token) => set({ gdriveToken: token }),

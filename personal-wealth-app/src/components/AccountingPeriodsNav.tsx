@@ -6,6 +6,7 @@ interface AccountingPeriodsNavProps {
   onSelectMonth: (monthYear: string) => void;
   onAddMonth: (monthYear: string) => Promise<void>;
   onCopyPrevious: (monthYear: string) => Promise<void>;
+  onDeleteMonth: (monthYear: string) => Promise<void>;
 }
 
 export function AccountingPeriodsNav({
@@ -16,6 +17,7 @@ export function AccountingPeriodsNav({
   onSelectMonth,
   onAddMonth,
   onCopyPrevious,
+  onDeleteMonth,
 }: AccountingPeriodsNavProps) {
   return (
     <div className="space-y-2 md:col-span-1">
@@ -52,16 +54,30 @@ export function AccountingPeriodsNav({
           const displayLabel = dateObj.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
 
           return (
-            <button
-              key={monthStr}
-              onClick={() => onSelectMonth(monthStr)}
-              className={`whitespace-nowrap w-full text-left px-3 py-2 text-xs font-medium rounded-md transition-all cursor-pointer ${isActive
-                ? 'bg-zinc-100 text-zinc-900 font-semibold shadow-sm'
-                : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-                }`}
-            >
-              {displayLabel}
-            </button>
+            <div key={monthStr} className="flex items-center gap-2">
+              <button
+                onClick={() => onSelectMonth(monthStr)}
+                className={`flex-1 text-left px-3 py-2 text-xs font-medium rounded-md transition-all cursor-pointer ${isActive
+                  ? 'bg-zinc-100 text-zinc-900 font-semibold shadow-sm'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+                  }`}
+              >
+                {displayLabel}
+              </button>
+              <button
+                title={`Delete ${displayLabel}`}
+                onClick={() => {
+                  // Simple confirm prompt before deleting
+                  // eslint-disable-next-line no-restricted-globals
+                  if (confirm(`Delete ${displayLabel}? This will remove all records for this month.`)) {
+                    void onDeleteMonth(monthStr);
+                  }
+                }}
+                className="text-xs text-red-400 hover:text-red-500 px-2 py-1 rounded-md"
+              >
+                ×
+              </button>
+            </div>
           );
         })}
       </div>
