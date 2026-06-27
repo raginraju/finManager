@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { db, type IncomeSource, type Expense, type DebtLiability } from './db';
+import { db, type IncomeSource, type Expense, type DebtLiability, type MonthMarker } from './db';
 import { findDataFile, downloadDataFile, createDataFile, updateDataFile } from './gdriveService';
 
 interface WealthState {
   income: IncomeSource[];
   expenses: Expense[];
   debts: DebtLiability[];
+  monthMarkers: string[];
   isLoading: boolean;
   gdriveToken: string | null;
   selectedMonthYear: string; // Current active view index
@@ -14,6 +15,7 @@ interface WealthState {
 
   fetchInitialData: () => Promise<void>;
   setSelectedMonthYear: (monthYear: string) => void;
+  addMonthYear: (monthYear: string, copyFromPrevious?: boolean) => Promise<void>;
   setGDriveToken: (token: string | null) => void;
   syncWithCloud: () => Promise<void>;
   clearAllData: () => Promise<void>;
@@ -28,8 +30,44 @@ export const useWealthStore = create<WealthState>((set, get) => {
   // Helpers to establish month indices
   const getNowString = () => new Date().toISOString().slice(0, 7);
 
-  const recalculateAvailableMonths = (income: IncomeSource[], expenses: Expense[], debts: DebtLiability[]) => {
+  const toMonthDate = (monthYear: string) => {
+    const [year, month] = monthYear.split('-').map(Number);
+    if (!year || !month || month < 1 || month > 12) return null;
+    return new Date(year, month - 1, 1);
+  };
+
+  const getPreviousMonthString = (monthYear: string) => {
+    const date = toMonthDate(monthYear);
+    if (!date) return null;
+    const previous = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+    return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const mapDateToTargetMonth = (dateValue: string, targetMonthYear: string) => {
+    const sourceDate = new Date(dateValue);
+    if (Number.isNaN(sourceDate.getTime())) {
+      return `${targetMonthYear}-01`;
+    }
+
+    const [year, month] = targetMonthYear.split('-').map(Number);
+    if (!year || !month) {
+      return dateValue;
+    }
+
+    const daysInTargetMonth = new Date(year, month, 0).getDate();
+    const day = Math.min(sourceDate.getDate(), daysInTargetMonth);
+    const mapped = new Date(year, month - 1, day);
+    return mapped.toISOString().split('T')[0];
+  };
+
+  const recalculateAvailableMonths = (
+    income: IncomeSource[],
+    expenses: Expense[],
+    debts: DebtLiability[],
+    monthMarkers: string[]
+  ) => {
     const months = new Set<string>([getNowString()]); // Always guarantee current month block
+    monthMarkers.forEach(m => months.add(m));
     income.forEach(i => months.add(i.monthYear));
     expenses.forEach(e => months.add(e.monthYear));
     debts.forEach(d => months.add(d.monthYear));
@@ -40,6 +78,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
     income: [],
     expenses: [],
     debts: [],
+    monthMarkers: [],
     isLoading: true,
     gdriveToken: null,
     selectedMonthYear: getNowString(),
@@ -47,20 +86,113 @@ export const useWealthStore = create<WealthState>((set, get) => {
     syncStatus: 'idle',
 
     fetchInitialData: async () => {
-      const [income, expenses, debts] = await Promise.all([
+      const [income, expenses, debts, monthMarkers] = await Promise.all([
         db.income.toArray(),
         db.expenses.toArray(),
         db.debts.toArray(),
+        db.monthMarkers.toArray(),
       ]);
-      const months = recalculateAvailableMonths(income, expenses, debts);
-      set({ income, expenses, debts, availableMonths: months, isLoading: false });
+      const markerMonths = monthMarkers.map((entry) => entry.monthYear);
+      const months = recalculateAvailableMonths(income, expenses, debts, markerMonths);
+      set({
+        income,
+        expenses,
+        debts,
+        monthMarkers: markerMonths,
+        availableMonths: months,
+        selectedMonthYear: getNowString(),
+        isLoading: false
+      });
     },
 
     setSelectedMonthYear: (monthYear) => set({ selectedMonthYear: monthYear }),
+
+    addMonthYear: async (monthYear, copyFromPrevious = false) => {
+      const nowMonth = getNowString();
+      const targetMonth = toMonthDate(monthYear) ? monthYear : nowMonth;
+      await db.monthMarkers.put({ monthYear: targetMonth });
+
+      if (copyFromPrevious) {
+        const previousMonth = getPreviousMonthString(targetMonth);
+
+        if (previousMonth) {
+          const state = get();
+
+          const hasTargetData =
+            state.income.some((item) => item.monthYear === targetMonth) ||
+            state.expenses.some((item) => item.monthYear === targetMonth) ||
+            state.debts.some((item) => item.monthYear === targetMonth);
+
+          if (!hasTargetData) {
+            const previousIncome = state.income.filter((item) => item.monthYear === previousMonth);
+            const previousExpenses = state.expenses.filter((item) => item.monthYear === previousMonth);
+            const previousDebts = state.debts.filter((item) => item.monthYear === previousMonth);
+
+            if (previousIncome.length > 0) {
+              await db.income.bulkAdd(
+                previousIncome.map(({ id: _id, ...item }) => ({
+                  ...item,
+                  monthYear: targetMonth,
+                  updatedAt: new Date()
+                }))
+              );
+            }
+
+            if (previousExpenses.length > 0) {
+              await db.expenses.bulkAdd(
+                previousExpenses.map(({ id: _id, ...item }) => ({
+                  ...item,
+                  monthYear: targetMonth,
+                  date: mapDateToTargetMonth(item.date, targetMonth)
+                }))
+              );
+            }
+
+            if (previousDebts.length > 0) {
+              await db.debts.bulkAdd(
+                previousDebts.map(({ id: _id, ...item }) => ({
+                  ...item,
+                  monthYear: targetMonth
+                }))
+              );
+            }
+          }
+        }
+
+        const [income, expenses, debts, monthMarkers] = await Promise.all([
+          db.income.toArray(),
+          db.expenses.toArray(),
+          db.debts.toArray(),
+          db.monthMarkers.toArray(),
+        ]);
+        const markerMonths = monthMarkers.map((entry) => entry.monthYear);
+
+        set({
+          income,
+          expenses,
+          debts,
+          monthMarkers: markerMonths,
+          availableMonths: recalculateAvailableMonths(income, expenses, debts, markerMonths),
+          selectedMonthYear: targetMonth,
+        });
+
+        get().syncWithCloud();
+        return;
+      }
+
+      set((state) => ({
+        monthMarkers: Array.from(new Set([...state.monthMarkers, targetMonth])).sort((a, b) => b.localeCompare(a)),
+        availableMonths: recalculateAvailableMonths(state.income, state.expenses, state.debts, [...state.monthMarkers, targetMonth]),
+        selectedMonthYear: targetMonth,
+      }));
+
+      get().syncWithCloud();
+    },
+
     setGDriveToken: (token) => set({ gdriveToken: token }),
 
     syncWithCloud: async () => {
-      const { gdriveToken, income, expenses, debts } = get();
+      const { gdriveToken, income, expenses, debts, monthMarkers } = get();
       if (!gdriveToken) return;
 
       // Trigger the toast to display "Syncing changes..."
@@ -68,35 +200,37 @@ export const useWealthStore = create<WealthState>((set, get) => {
 
       try {
         const fileId = await findDataFile(gdriveToken);
-        const localPayload = { income, expenses, debts };
+        const localPayload = { income, expenses, debts, monthMarkers };
 
         if (!fileId) {
           await createDataFile(gdriveToken, localPayload);
         } else {
           // If hydrating a fresh state, don't overwrite cloud data
-          if (income.length === 0 && expenses.length === 0 && debts.length === 0) {
+          if (income.length === 0 && expenses.length === 0 && debts.length === 0 && monthMarkers.length === 0) {
             const cloudPayload = await downloadDataFile(gdriveToken, fileId);
             if (cloudPayload) {
-              await Promise.all([db.income.clear(), db.expenses.clear(), db.debts.clear()]);
+              await Promise.all([db.income.clear(), db.expenses.clear(), db.debts.clear(), db.monthMarkers.clear()]);
               if (cloudPayload.income?.length) await db.income.bulkAdd(cloudPayload.income);
               if (cloudPayload.expenses?.length) await db.expenses.bulkAdd(cloudPayload.expenses);
               if (cloudPayload.debts?.length) await db.debts.bulkAdd(cloudPayload.debts);
+              if (cloudPayload.monthMarkers?.length) {
+                const markerPayload: MonthMarker[] = cloudPayload.monthMarkers.map((monthYear: string) => ({ monthYear }));
+                await db.monthMarkers.bulkPut(markerPayload);
+              }
 
-              const [freshIncome, freshExpenses, freshDebts] = await Promise.all([
-                db.income.toArray(), db.expenses.toArray(), db.debts.toArray()
+              const [freshIncome, freshExpenses, freshDebts, freshMonthMarkers] = await Promise.all([
+                db.income.toArray(), db.expenses.toArray(), db.debts.toArray(), db.monthMarkers.toArray()
               ]);
 
-              const months = new Set<string>([new Date().toISOString().slice(0, 7)]);
-              freshIncome.forEach(i => months.add(i.monthYear));
-              freshExpenses.forEach(e => months.add(e.monthYear));
-              freshDebts.forEach(d => months.add(d.monthYear));
+              const markerMonths = freshMonthMarkers.map((entry) => entry.monthYear);
 
               set({
                 income: freshIncome,
                 expenses: freshExpenses,
                 debts: freshDebts,
-                availableMonths: Array.from(months).sort((a, b) => b.localeCompare(a)),
-                selectedMonthYear: Array.from(months).sort((a, b) => b.localeCompare(a))[0]
+                monthMarkers: markerMonths,
+                availableMonths: recalculateAvailableMonths(freshIncome, freshExpenses, freshDebts, markerMonths),
+                selectedMonthYear: getNowString()
               });
             }
           } else {
@@ -122,9 +256,9 @@ export const useWealthStore = create<WealthState>((set, get) => {
 
     clearAllData: async () => {
       set({ isLoading: true });
-      await Promise.all([db.income.clear(), db.expenses.clear(), db.debts.clear()]);
+      await Promise.all([db.income.clear(), db.expenses.clear(), db.debts.clear(), db.monthMarkers.clear()]);
       const freshMonth = getNowString();
-      set({ income: [], expenses: [], debts: [], availableMonths: [freshMonth], selectedMonthYear: freshMonth });
+      set({ income: [], expenses: [], debts: [], monthMarkers: [], availableMonths: [freshMonth], selectedMonthYear: freshMonth });
       await get().syncWithCloud();
       set({ isLoading: false });
     },
@@ -134,7 +268,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
       const updatedExpenses = await db.expenses.toArray();
       set((state) => ({
         expenses: updatedExpenses,
-        availableMonths: recalculateAvailableMonths(state.income, updatedExpenses, state.debts)
+        availableMonths: recalculateAvailableMonths(state.income, updatedExpenses, state.debts, state.monthMarkers)
       }));
       get().syncWithCloud();
     },
@@ -144,7 +278,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
       const updatedExpenses = await db.expenses.toArray();
       set((state) => ({
         expenses: updatedExpenses,
-        availableMonths: recalculateAvailableMonths(state.income, updatedExpenses, state.debts)
+        availableMonths: recalculateAvailableMonths(state.income, updatedExpenses, state.debts, state.monthMarkers)
       }));
       get().syncWithCloud();
     },
@@ -154,7 +288,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
       const income = await db.income.toArray();
       set((state) => ({
         income,
-        availableMonths: recalculateAvailableMonths(income, state.expenses, state.debts)
+        availableMonths: recalculateAvailableMonths(income, state.expenses, state.debts, state.monthMarkers)
       }));
       get().syncWithCloud();
     },
@@ -164,7 +298,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
       const debts = await db.debts.toArray();
       set((state) => ({
         debts,
-        availableMonths: recalculateAvailableMonths(state.income, state.expenses, debts)
+        availableMonths: recalculateAvailableMonths(state.income, state.expenses, debts, state.monthMarkers)
       }));
       get().syncWithCloud();
     },

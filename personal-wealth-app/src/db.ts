@@ -29,13 +29,24 @@ export interface DebtLiability {
   remainingMonths?: number;
 }
 
+export interface MonthMarker {
+  monthYear: string;
+}
+
 class WealthDatabase extends Dexie {
   income!: Table<IncomeSource>;
   expenses!: Table<Expense>;
   debts!: Table<DebtLiability>;
+  monthMarkers!: Table<MonthMarker, string>;
 
   constructor() {
     super('WealthDatabase');
+    this.version(4).stores({
+      income: '++id, monthYear, name',
+      expenses: '++id, monthYear, date, category, isFixed',
+      debts: '++id, monthYear, name, isFixedInstallment',
+      monthMarkers: '&monthYear',
+    });
     this.version(3).stores({
       income: '++id, monthYear, name',
       expenses: '++id, monthYear, date, category, isFixed',
