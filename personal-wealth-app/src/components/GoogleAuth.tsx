@@ -10,7 +10,7 @@ declare global {
 export function GoogleAuth() {
   // Pull actions and reactive token state from our Zustand engine
   const setGDriveToken = useWealthStore((state) => state.setGDriveToken);
-  const syncWithCloud = useWealthStore((state) => state.syncWithCloud);
+  const hydrateFromCloud = useWealthStore((state) => (state as any).hydrateFromCloud as () => Promise<void>);
   const token = useWealthStore((state) => state.gdriveToken);
 
   const handleLogin = () => {
@@ -26,15 +26,17 @@ export function GoogleAuth() {
         
         // 1. Commit token to global Zustand state engine
         setGDriveToken(response.access_token);
-        
-        // 2. Instantly execute an initial sync verification scan
-        await syncWithCloud();
+
+        // 2. Instantly hydrate from cloud (shows loading overlay until done)
+        if (hydrateFromCloud) await hydrateFromCloud();
       },
     });
 
     // Trigger the popup
     client.requestAccessToken();
   };
+
+  const isConnected = Boolean(token);
 
   return (
     <div className="flex flex-col items-start gap-4 p-4 border border-zinc-800 rounded-xl bg-zinc-900/50 w-full">
@@ -43,7 +45,7 @@ export function GoogleAuth() {
         Securely backup your dynamic local financial data to your personal Google Drive sandbox.
       </p>
       
-      {!token ? (
+      {!isConnected ? (
         <button
           onClick={handleLogin}
           className="px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors cursor-pointer"
@@ -56,5 +58,41 @@ export function GoogleAuth() {
         </div>
       )}
     </div>
+  );
+}
+
+interface GoogleAuthButtonProps {
+  className?: string;
+}
+
+export function GoogleAuthButton({ className }: GoogleAuthButtonProps) {
+  const setGDriveToken = useWealthStore((state) => state.setGDriveToken);
+  const syncWithCloud = useWealthStore((state) => state.syncWithCloud);
+
+  const handleLogin = () => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: async (response: any) => {
+        if (response.error !== undefined) {
+          console.error('Login Failed:', response);
+          throw response;
+        }
+
+        setGDriveToken(response.access_token);
+        await syncWithCloud();
+      },
+    });
+
+    client.requestAccessToken();
+  };
+
+  return (
+    <button
+      onClick={handleLogin}
+      className={className ?? 'px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors cursor-pointer'}
+    >
+      Authenticate with Google
+    </button>
   );
 }

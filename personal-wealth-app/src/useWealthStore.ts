@@ -12,10 +12,12 @@ interface WealthState {
   selectedMonthYear: string; // Current active view index
   availableMonths: string[]; // Descending list of active record blocks
   syncStatus: 'idle' | 'syncing' | 'saved';
+  isHydrating: boolean;
 
   fetchInitialData: () => Promise<void>;
   setSelectedMonthYear: (monthYear: string) => void;
   addMonthYear: (monthYear: string, copyFromPrevious?: boolean) => Promise<void>;
+  hydrateFromCloud: () => Promise<void>;
   setGDriveToken: (token: string | null) => void;
   syncWithCloud: () => Promise<void>;
   clearAllData: () => Promise<void>;
@@ -84,6 +86,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
     selectedMonthYear: getNowString(),
     availableMonths: [getNowString()],
     syncStatus: 'idle',
+      isHydrating: false,
 
     fetchInitialData: async () => {
       const [income, expenses, debts, monthMarkers] = await Promise.all([
@@ -190,6 +193,15 @@ export const useWealthStore = create<WealthState>((set, get) => {
     },
 
     setGDriveToken: (token) => set({ gdriveToken: token }),
+
+    hydrateFromCloud: async () => {
+      set({ isHydrating: true });
+      try {
+        await get().syncWithCloud();
+      } finally {
+        set({ isHydrating: false });
+      }
+    },
 
     syncWithCloud: async () => {
       const { gdriveToken, income, expenses, debts, monthMarkers } = get();

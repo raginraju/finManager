@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useWealthStore } from './useWealthStore';
+import { GoogleAuthButton } from './components/GoogleAuth';
 import { AppHeader } from './components/AppHeader';
 import { AccountingPeriodsNav } from './components/AccountingPeriodsNav';
 import { FinancialSummary } from './components/FinancialSummary';
@@ -12,6 +13,7 @@ function App() {
   const {
     fetchInitialData,
     isLoading,
+    isHydrating,
     availableMonths,
     selectedMonthYear,
     setSelectedMonthYear,
@@ -33,6 +35,25 @@ function App() {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-zinc-400">
         <p className="text-xs font-medium tracking-widest animate-pulse uppercase">Syncing Ledger Vault...</p>
+      </div>
+    );
+  }
+
+  if (!gdriveToken) {
+    return (
+      <div className="min-h-screen w-full bg-zinc-950 text-zinc-50 font-sans flex items-center justify-center px-6">
+        <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-center space-y-6">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-100">Ledger Matrix</h1>
+          <GoogleAuthButton className="w-full px-4 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors cursor-pointer" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isHydrating) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-zinc-400">
+        <p className="text-xs font-medium tracking-widest animate-pulse uppercase">Loading from Drive...</p>
       </div>
     );
   }
