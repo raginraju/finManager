@@ -1,5 +1,6 @@
 import { useWealthStore } from '../useWealthStore';
 import { db } from '../db';
+import { triggerHaptic } from '../util/haptics';
 
 export function DataLedger() {
   const { income, expenses, debts, selectedMonthYear, fetchInitialData, syncWithCloud } = useWealthStore();
@@ -11,14 +12,10 @@ export function DataLedger() {
 
   const handleDelete = async (table: 'income' | 'expenses' | 'debts', id: number | undefined) => {
     if (!id) return;
-    
-    // 1. Delete from IndexedDB directly
+    triggerHaptic('heavy');
+
     await db[table].delete(id);
-    
-    // 2. Pull fresh data into Zustand memory to recalculate charts
     await fetchInitialData();
-    
-    // 3. Sync the deletion upstream to Google Drive
     await syncWithCloud();
   };
 

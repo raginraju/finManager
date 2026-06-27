@@ -1,3 +1,5 @@
+import { triggerHaptic } from '../util/haptics';
+
 interface PurgeModalProps {
   isOpen: boolean;
   confirmText: string;
@@ -42,7 +44,10 @@ export function PurgeModal({
 
         <div className="flex gap-2 pt-2">
           <button
-            onClick={onCancel}
+            onClick={() => {
+              triggerHaptic('light');
+              onCancel();
+            }}
             className="flex-1 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition-colors cursor-pointer"
           >
             Cancel
@@ -50,6 +55,7 @@ export function PurgeModal({
           <button
             disabled={!isConfirmed}
             onClick={() => {
+              triggerHaptic('heavy');
               void onConfirm();
             }}
             className={`flex-1 py-2 rounded-md text-xs font-medium transition-all select-none ${isConfirmed

@@ -1,3 +1,5 @@
+import { triggerHaptic } from '../util/haptics';
+
 interface AccountingPeriodsNavProps {
   availableMonths: string[];
   selectedMonthYear: string;
@@ -27,18 +29,26 @@ export function AccountingPeriodsNav({
         <input
           type="month"
           value={newMonthYear}
-          onChange={(e) => onNewMonthYearChange(e.target.value)}
+          onChange={(e) => {
+            onNewMonthYearChange(e.target.value);
+          }}
           className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
         />
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => onAddMonth(newMonthYear)}
+            onClick={() => {
+              triggerHaptic('medium');
+              void onAddMonth(newMonthYear);
+            }}
             className="py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-medium transition-colors cursor-pointer border border-zinc-700"
           >
             Add Month
           </button>
           <button
-            onClick={() => onCopyPrevious(newMonthYear)}
+            onClick={() => {
+              triggerHaptic('medium');
+              void onCopyPrevious(newMonthYear);
+            }}
             className="py-2 rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-[11px] font-medium transition-colors cursor-pointer"
           >
             Copy Prev
@@ -56,7 +66,10 @@ export function AccountingPeriodsNav({
           return (
             <div key={monthStr} className="flex items-center gap-2">
               <button
-                onClick={() => onSelectMonth(monthStr)}
+                onClick={() => {
+                  triggerHaptic('light');
+                  onSelectMonth(monthStr);
+                }}
                 className={`flex-1 text-left px-3 py-2 text-xs font-medium rounded-md transition-all cursor-pointer ${isActive
                   ? 'bg-zinc-100 text-zinc-900 font-semibold shadow-sm'
                   : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
@@ -70,6 +83,7 @@ export function AccountingPeriodsNav({
                   // Simple confirm prompt before deleting
                   // eslint-disable-next-line no-restricted-globals
                   if (confirm(`Delete ${displayLabel}? This will remove all records for this month.`)) {
+                    triggerHaptic('heavy');
                     void onDeleteMonth(monthStr);
                   }
                 }}

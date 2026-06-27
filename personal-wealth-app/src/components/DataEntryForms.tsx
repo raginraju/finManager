@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useWealthStore } from '../useWealthStore';
+import { triggerHaptic } from '../util/haptics';
 
 export function DataEntryForms() {
   const selectedMonthYear = useWealthStore((state) => state.selectedMonthYear);
@@ -22,6 +23,7 @@ export function DataEntryForms() {
   const handleIncomeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!incName || !incAmount) return;
+    triggerHaptic('medium');
     const amount = parseFloat(incAmount);
 
     await upsertIncome({
@@ -38,6 +40,7 @@ export function DataEntryForms() {
   const handleExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expDesc || !expAmount) return;
+    triggerHaptic('medium');
     await addExpense({
       monthYear: selectedMonthYear,
       description: expDesc,
@@ -53,6 +56,7 @@ export function DataEntryForms() {
   const handleDebtSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!debtName || !debtMonthly) return;
+    triggerHaptic('medium');
     await upsertDebt({
       monthYear: selectedMonthYear,
       name: debtName,
