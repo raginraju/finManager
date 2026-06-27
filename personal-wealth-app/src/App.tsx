@@ -5,7 +5,6 @@ import { AppHeader } from './components/AppHeader';
 import { AccountingPeriodsNav } from './components/AccountingPeriodsNav';
 import { FinancialSummary } from './components/FinancialSummary';
 import { DataEntryForms } from './components/DataEntryForms';
-import { DataLedger } from './components/DataLedger';
 import { SyncToast } from './components/SyncToast';
 import { PurgeModal } from './components/PurgeModal';
 import { UndoSnackbar } from './components/UndoSnackbar';
@@ -22,7 +21,10 @@ function App() {
     addMonthYear,
     deleteMonthYear,
     clearAllData,
-    gdriveToken
+    gdriveToken,
+    income,     // 💡 Extract collections from store hook
+    expenses,
+    debts
   } = useWealthStore();
 
   // Modal Control State
@@ -34,6 +36,22 @@ function App() {
     fetchInitialData();
   }, [fetchInitialData]);
 
+  // 💡 Root-level Metric Computations to pass up to AppHeader
+  const currentMonthIncome = income.filter(i => i.monthYear === selectedMonthYear);
+  const netTakeHome = currentMonthIncome.reduce((sum, i) => sum + i.netTakeHome, 0);
+
+  const totalExpenses = expenses
+    .filter(e => e.monthYear === selectedMonthYear)
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+  const totalDebtInstallments = debts
+    .filter(d => d.monthYear === selectedMonthYear)
+    .reduce((sum, d) => sum + Number(d.monthlyPayment || 0), 0);
+
+  const totalSpent = totalExpenses + totalDebtInstallments;
+  const remainingSurplus = netTakeHome - totalSpent;
+
+  // Loader blocker for reading internal local Dexie storage on initialization
   if (isLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-zinc-400">
@@ -42,6 +60,7 @@ function App() {
     );
   }
 
+  // Google Authentication Gate Lock (Preserved to maintain state access)
   if (!gdriveToken) {
     return (
       <div className="min-h-screen w-full bg-zinc-950 text-zinc-50 font-sans flex items-center justify-center px-6">
@@ -53,6 +72,7 @@ function App() {
     );
   }
 
+  // Hydration fallback loader state for cloud download transfers
   if (isHydrating) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-zinc-400">
@@ -75,13 +95,17 @@ function App() {
       {/* Main Container Content */}
       <div className="max-w-6xl w-full mx-auto p-6 md:p-8 space-y-6">
 
-        {/* Header Block */}
-        <AppHeader gdriveToken={gdriveToken} />
+        {/* 💡 Header Block — Now rendering calculations dynamically above the border line */}
+        <AppHeader 
+          netTakeHome={netTakeHome}
+          totalSpent={totalSpent}
+          remainingSurplus={remainingSurplus}
+        />
 
-        {/* Structural View Grid */}
+        {/* Structural View Grid Layout */}
         <div className="grid gap-6 md:grid-cols-4 items-start">
 
-          {/* Navigation Blocks */}
+          {/* Navigation Blocks & Period Operations Form Side panel */}
           <AccountingPeriodsNav
             availableMonths={availableMonths}
             selectedMonthYear={selectedMonthYear}
@@ -93,11 +117,10 @@ function App() {
             onDeleteMonth={(monthYear) => deleteMonthYear(monthYear)}
           />
 
-          {/* Core Dashboards Tier */}
+          {/* Core Dashboards Tier — Clutter free workspace cards */}
           <div className="space-y-6 md:col-span-3">
             <FinancialSummary />
             <DataEntryForms />
-            <DataLedger />
           </div>
 
         </div>
@@ -125,8 +148,8 @@ function App() {
         onConfirm={handleExecutePurge}
       />
       
-      {/* Global Non-Disturbing Toast Notification Container */}
-      <SyncToast /> {/* <-- Mount it here */}
+      {/* Background Global Triggers */}
+      <SyncToast /> 
       <UndoSnackbar />
     </div>
   );

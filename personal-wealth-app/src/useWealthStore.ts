@@ -97,7 +97,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
     selectedMonthYear: getNowString(),
     availableMonths: [getNowString()],
     syncStatus: 'idle',
-      isHydrating: false,
+    isHydrating: false,
 
     fetchInitialData: async () => {
       const [income, expenses, debts, monthMarkers] = await Promise.all([
@@ -204,7 +204,6 @@ export const useWealthStore = create<WealthState>((set, get) => {
     },
 
     deleteMonthYear: async (monthYear) => {
-      // Soft delete with undo snapshot: capture current records, remove them, and store a snapshot with expiry
       try {
         const [markerEntry, incomeToDelete, expensesToDelete, debtsToDelete] = await Promise.all([
           db.monthMarkers.get(monthYear),
@@ -219,10 +218,9 @@ export const useWealthStore = create<WealthState>((set, get) => {
           expenses: expensesToDelete,
           debts: debtsToDelete,
           markerExists: Boolean(markerEntry),
-          expiresAt: Date.now() + 10000, // 10s to undo
+          expiresAt: Date.now() + 10000,
         };
 
-        // perform deletes
         await Promise.all([
           db.monthMarkers.delete(monthYear),
           db.income.where('monthYear').equals(monthYear).delete(),
@@ -249,12 +247,12 @@ export const useWealthStore = create<WealthState>((set, get) => {
           lastDeletedSnapshot: snapshot,
         });
 
-        // clear snapshot after expiry
         setTimeout(() => {
-          if (get().lastDeletedSnapshot && get().lastDeletedSnapshot!.expiresAt <= Date.now()) {
+          const currentSnapshot = get().lastDeletedSnapshot;
+          if (currentSnapshot && currentSnapshot.expiresAt <= Date.now()) {
             set({ lastDeletedSnapshot: null });
           }
-        }, 10000 + 100); // small buffer
+        }, 10100);
 
         get().syncWithCloud();
       } catch (err) {
@@ -267,7 +265,6 @@ export const useWealthStore = create<WealthState>((set, get) => {
       if (!snapshot) return;
 
       try {
-        // restore marker if needed
         if (snapshot.markerExists) {
           await db.monthMarkers.put({ monthYear: snapshot.monthYear });
         }
@@ -321,7 +318,6 @@ export const useWealthStore = create<WealthState>((set, get) => {
       const { gdriveToken, income, expenses, debts, monthMarkers } = get();
       if (!gdriveToken) return;
 
-      // Trigger the toast to display "Syncing changes..."
       set({ syncStatus: 'syncing' });
 
       try {
@@ -331,7 +327,6 @@ export const useWealthStore = create<WealthState>((set, get) => {
         if (!fileId) {
           await createDataFile(gdriveToken, localPayload);
         } else {
-          // If hydrating a fresh state, don't overwrite cloud data
           if (income.length === 0 && expenses.length === 0 && debts.length === 0 && monthMarkers.length === 0) {
             const cloudPayload = await downloadDataFile(gdriveToken, fileId);
             if (cloudPayload) {
@@ -364,10 +359,8 @@ export const useWealthStore = create<WealthState>((set, get) => {
           }
         }
 
-        // Success: Flip status to "Saved"
         set({ syncStatus: 'saved' });
 
-        // Automatically fade out the status notification after 3 seconds back to idle
         setTimeout(() => {
           if (get().syncStatus === 'saved') {
             set({ syncStatus: 'idle' });
@@ -376,7 +369,7 @@ export const useWealthStore = create<WealthState>((set, get) => {
 
       } catch (err) {
         console.error('Cloud synchronization failed:', err);
-        set({ syncStatus: 'idle' }); // Fallback on failure
+        set({ syncStatus: 'idle' });
       }
     },
 
