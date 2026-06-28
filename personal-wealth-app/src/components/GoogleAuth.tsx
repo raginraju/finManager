@@ -1,4 +1,4 @@
-import { useWealthStore } from '../useWealthStore';
+import { useWealthStore } from '../store/useWealthStore';
 import { PRESSABLE_CLASS } from '../util/pressable';
 
 // Declare the global google object so TypeScript doesn't complain

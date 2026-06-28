@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useWealthStore } from '../useWealthStore';
+import { useWealthStore } from '../store/useWealthStore';
 import { PRESSABLE_SOFT_CLASS } from '../util/pressable';
 
 export function UndoSnackbar() {

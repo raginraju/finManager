@@ -1,4 +1,4 @@
-import { useWealthStore } from '../useWealthStore';
+import { useWealthStore } from '../store/useWealthStore';
 
 export function SyncToast() {
   const syncStatus = useWealthStore((state) => state.syncStatus);

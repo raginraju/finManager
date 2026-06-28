@@ -1,4 +1,4 @@
-import { useWealthStore } from '../useWealthStore';
+import { useWealthStore } from '../store/useWealthStore';
 import { DataLedger } from './DataLedger';
 
 export function FinancialSummary() {

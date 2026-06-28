@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useWealthStore } from '../useWealthStore';
+import { useWealthStore } from '../store/useWealthStore';
 import { PRESSABLE_CLASS } from '../util/pressable';
 
 // Core category option selection blocks

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useWealthStore } from './useWealthStore';
+import { useWealthStore } from './store/useWealthStore';
 import { GoogleAuthButton } from './components/GoogleAuth';
 import { AppHeader } from './components/AppHeader';
 import { AccountingPeriodsNav } from './components/AccountingPeriodsNav';

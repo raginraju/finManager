@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useWealthStore } from '../useWealthStore';
+import { useWealthStore } from '../store/useWealthStore';
 import { db } from '../db';
 import { PRESSABLE_SOFT_CLASS } from '../util/pressable';
 

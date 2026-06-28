@@ -1,0 +1,37 @@
+import { type IncomeSource, type Expense, type DebtLiability } from '../db';
+
+export interface WealthState {
+  income: IncomeSource[];
+  expenses: Expense[];
+  debts: DebtLiability[];
+  monthMarkers: string[];
+  isLoading: boolean;
+  gdriveToken: string | null;
+  selectedMonthYear: string;
+  availableMonths: string[];
+  syncStatus: 'idle' | 'syncing' | 'saved';
+  isHydrating: boolean;
+
+  fetchInitialData: () => Promise<void>;
+  setSelectedMonthYear: (monthYear: string) => void;
+  addMonthYear: (monthYear: string, copyFromPrevious?: boolean) => Promise<void>;
+  hydrateFromCloud: () => Promise<void>;
+  setGDriveToken: (token: string | null) => Promise<void>;
+  deleteMonthYear: (monthYear: string) => Promise<void>;
+  lastDeletedSnapshot: null | {
+    monthYear: string;
+    income: IncomeSource[];
+    expenses: Expense[];
+    debts: DebtLiability[];
+    markerExists: boolean;
+    expiresAt: number;
+  };
+  undoDeleteMonthYear: () => Promise<void>;
+  syncWithCloud: () => Promise<void>;
+  clearAllData: () => Promise<void>;
+
+  addExpense: (expense: Omit<Expense, 'id'>) => Promise<void>;
+  deleteExpense: (id: number) => Promise<void>;
+  upsertIncome: (income: Omit<IncomeSource, 'id'> & { id?: number }) => Promise<void>;
+  upsertDebt: (debt: Omit<DebtLiability, 'id'> & { id?: number }) => Promise<void>;
+}
