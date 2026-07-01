@@ -13,6 +13,17 @@ function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+function extractEmailFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const decoded = JSON.parse(atob(parts[1]));
+    return decoded.email || null;
+  } catch {
+    return null;
+  }
+}
+
 async function queryFirstFileId(token: string, rawQuery: string): Promise<string | null> {
   const query = encodeURIComponent(rawQuery);
   const response = await fetch(`${DRIVE_API_URL}?q=${query}&spaces=drive`, {
@@ -28,8 +39,10 @@ async function queryFirstFileId(token: string, rawQuery: string): Promise<string
 }
 
 async function getOrCreateAppFolder(token: string): Promise<string> {
-  if (folderIdCache.has(token)) {
-    return folderIdCache.get(token)!;
+  const cacheKey = extractEmailFromToken(token) || token;
+
+  if (folderIdCache.has(cacheKey)) {
+    return folderIdCache.get(cacheKey)!;
   }
 
   const folderPromise = (async () => {
@@ -63,7 +76,7 @@ async function getOrCreateAppFolder(token: string): Promise<string> {
     return data.id;
   })();
 
-  folderIdCache.set(token, folderPromise);
+  folderIdCache.set(cacheKey, folderPromise);
   return folderPromise;
 }
 
@@ -94,9 +107,15 @@ export async function downloadDataFile(token: string, fileId: string): Promise<a
 
 /**
  * Create a fresh JSON file in the application space using a specific shard identifier name.
- * 💡 MODIFIED: Added dynamic fileName configuration wrapper parameters
+ * 💡 MODIFIED: Check if file exists first, return existing ID if found
  */
 export async function createDataFile(token: string, payload: any, fileName: string): Promise<string> {
+  // Check if file already exists
+  const existingFileId = await findDataFile(token, fileName);
+  if (existingFileId) {
+    return existingFileId;
+  }
+
   const folderId = await getOrCreateAppFolder(token);
   const metadata = {
     name: fileName,
