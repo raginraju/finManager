@@ -3,6 +3,8 @@ const UPLOAD_API_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 const APP_FOLDER_NAME = 'wealthmanager';
 const DRIVE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 
+const folderIdCache = new Map<string, Promise<string>>();
+
 interface DriveFileSearchResponse {
   files: Array<{ id: string; name: string }>;
 }
@@ -26,34 +28,43 @@ async function queryFirstFileId(token: string, rawQuery: string): Promise<string
 }
 
 async function getOrCreateAppFolder(token: string): Promise<string> {
-  const safeFolderName = escapeDriveQueryValue(APP_FOLDER_NAME);
-  const existingFolderId = await queryFirstFileId(
-    token,
-    `name = '${safeFolderName}' and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
-  );
-
-  if (existingFolderId) {
-    return existingFolderId;
+  if (folderIdCache.has(token)) {
+    return folderIdCache.get(token)!;
   }
 
-  const response = await fetch(DRIVE_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: APP_FOLDER_NAME,
-      mimeType: DRIVE_FOLDER_MIME_TYPE,
-    }),
-  });
+  const folderPromise = (async () => {
+    const safeFolderName = escapeDriveQueryValue(APP_FOLDER_NAME);
+    const existingFolderId = await queryFirstFileId(
+      token,
+      `name = '${safeFolderName}' and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
+    );
 
-  if (!response.ok) {
-    throw new Error(`Failed to create Google Drive folder: ${APP_FOLDER_NAME}`);
-  }
+    if (existingFolderId) {
+      return existingFolderId;
+    }
 
-  const data: { id: string } = await response.json();
-  return data.id;
+    const response = await fetch(DRIVE_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: APP_FOLDER_NAME,
+        mimeType: DRIVE_FOLDER_MIME_TYPE,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create Google Drive folder: ${APP_FOLDER_NAME}`);
+    }
+
+    const data: { id: string } = await response.json();
+    return data.id;
+  })();
+
+  folderIdCache.set(token, folderPromise);
+  return folderPromise;
 }
 
 /**
