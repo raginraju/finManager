@@ -1,14 +1,21 @@
 import { create } from 'zustand';
-import { db } from '../db';
-import { findDataFile, updateDataFile } from '../gdriveService';
+import { db, type MonthMarker } from '../db';
+import { findDataFile, downloadDataFile, updateDataFile } from '../gdriveService';
 import { type WealthState } from './types';
 import * as utils from './helpers';
-import { ensureAndReadMetadata, upsertMetadata, loadShardIntoDb, syncMonthShard } from './cloudSync';
+import { upsertMetadata, loadShardIntoDb, syncMonthShard } from './cloudSync';
 
 const AUTOSYNC_DEBOUNCE_MS = 1200;
 let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let isFetchingInitialData = false;
 
 function queueAutoSync(syncAction: () => Promise<void>): void {
+  // Don't auto-sync while we're fetching initial data
+  if (isFetchingInitialData) {
+    console.log('[queueAutoSync] Skipping - fetching initial data in progress');
+    return;
+  }
+
   if (autoSyncTimer) {
     clearTimeout(autoSyncTimer);
   }
@@ -58,39 +65,99 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   // 💡 INITIALIZATION: Pull Meta Index first, then current Shard
   // ========================================================
   fetchInitialData: async () => {
-    // 1. Instantly paint whatever is cached locally in IndexedDB for 0ms UI blocking
-    const localSnapshot = await readLocalSnapshot();
-    const activePeriod = get().selectedMonthYear || utils.getNowString();
-    
-    set({
-      ...localSnapshot,
-      selectedMonthYear: activePeriod,
-      isLoading: false
-    });
+    // Prevent concurrent fetches
+    if (isFetchingInitialData) {
+      console.log('[fetchInitialData] Already fetching, skipping');
+      return;
+    }
 
-    const token = get().gdriveToken;
-    if (!token) return;
+    isFetchingInitialData = true;
+    console.log('[fetchInitialData] Starting, locked fetch flag');
 
-    set({ isHydrating: true });
     try {
-      // 2. Load index metadata and 3. load active monthly shard
-      await ensureAndReadMetadata(token, localSnapshot.monthMarkers);
-      await loadShardIntoDb(token, activePeriod);
+      const token = get().gdriveToken;
+      console.log('[fetchInitialData] Token status:', !!token);
 
-      // Re-read storage lines to paint fresh metrics on screen
-      const freshSnapshot = await readLocalSnapshot();
-      set(freshSnapshot);
+      // If no token, just load local and stop
+      if (!token) {
+        console.log('[fetchInitialData] No token, loading local data only');
+        const localSnapshot = await readLocalSnapshot();
+        const activePeriod = get().selectedMonthYear || utils.getNowString();
+        
+        set({
+          ...localSnapshot,
+          selectedMonthYear: activePeriod,
+          isLoading: false
+        });
+        return;
+      }
 
-    } catch (err) {
-      console.error("Failed to load sharded source of truth:", err);
+      // Token exists - immediately show loading state (don't show stale data)
+      console.log('[fetchInitialData] Token exists, loading from cloud as source of truth');
+      set({ isLoading: true, isHydrating: true });
+
+      try {
+        // 1. CLEAR all local data first
+        await Promise.all([
+          db.income.clear(),
+          db.expenses.clear(),
+          db.debts.clear(),
+          db.monthMarkers.clear(),
+        ]);
+        console.log('[fetchInitialData] Cleared local IndexedDB');
+
+        // 2. Load metadata from cloud
+        const cloudMetaId = await findDataFile(token, 'metadata.json');
+        console.log('[fetchInitialData] Cloud metadata file ID:', cloudMetaId);
+        let cloudMonths: string[] = [];
+
+        if (cloudMetaId) {
+          const cloudMeta = await downloadDataFile(token, cloudMetaId);
+          console.log('[fetchInitialData] Cloud metadata:', cloudMeta);
+          cloudMonths = Array.isArray(cloudMeta?.monthMarkers) ? cloudMeta.monthMarkers : [];
+          console.log('[fetchInitialData] Cloud months:', cloudMonths);
+          
+          if (cloudMonths.length) {
+            const markerPayload: MonthMarker[] = cloudMonths.map((monthYear) => ({ monthYear }));
+            await db.monthMarkers.bulkPut(markerPayload);
+            console.log('[fetchInitialData] Stored month markers in local DB');
+          }
+        }
+
+        // 3. Load active period shard from cloud
+        const activePeriod = get().selectedMonthYear || utils.getNowString();
+        const activeShard = cloudMonths.length ? cloudMonths[0] : activePeriod;
+        console.log('[fetchInitialData] Loading shard for month:', activeShard);
+        const shardLoaded = await loadShardIntoDb(token, activeShard);
+        console.log('[fetchInitialData] Shard loaded:', shardLoaded);
+
+        // 4. Refresh UI with cloud data
+        const freshSnapshot = await readLocalSnapshot();
+        console.log('[fetchInitialData] Fresh snapshot after cloud load:', freshSnapshot);
+        set({ 
+          ...freshSnapshot, 
+          selectedMonthYear: activeShard, 
+          isLoading: false,
+          isHydrating: false 
+        });
+
+      } catch (err) {
+        console.error("Failed to load from cloud:", err);
+        set({ isLoading: false, isHydrating: false });
+      }
     } finally {
-      set({ isHydrating: false });
+      isFetchingInitialData = false;
+      console.log('[fetchInitialData] Unlocked fetch flag');
     }
   },
 
   setGDriveToken: async (token) => {
+    console.log('[setGDriveToken] Setting token and fetching data');
     set({ gdriveToken: token });
-    if (token) await get().fetchInitialData();
+    if (token) {
+      await get().fetchInitialData();
+    }
+    console.log('[setGDriveToken] Done');
     return Promise.resolve();
   },
 

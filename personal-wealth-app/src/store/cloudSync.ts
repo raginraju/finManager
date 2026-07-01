@@ -45,26 +45,42 @@ export async function upsertMetadata(token: string, monthMarkers: string[]): Pro
 export async function loadShardIntoDb(token: string, monthYear: string): Promise<boolean> {
   const shardName = `ledger_${monthYear}.json`;
   const shardId = await findDataFile(token, shardName);
+  console.log(`[loadShardIntoDb] Looking for shard: ${shardName}, found ID:`, shardId);
 
   if (!shardId) {
+    console.log(`[loadShardIntoDb] No shard found for ${monthYear}`);
     return false;
   }
 
   const cloudShard = (await downloadDataFile(token, shardId)) as CloudShardPayload;
+  console.log(`[loadShardIntoDb] Downloaded shard:`, cloudShard);
+  
   if (!cloudShard) {
+    console.log(`[loadShardIntoDb] Cloud shard is null/undefined`);
     return false;
   }
 
+  console.log(`[loadShardIntoDb] Clearing data for month ${monthYear}`);
   await Promise.all([
     db.income.where('monthYear').equals(monthYear).delete(),
     db.expenses.where('monthYear').equals(monthYear).delete(),
     db.debts.where('monthYear').equals(monthYear).delete(),
   ]);
 
-  if (cloudShard.income?.length) await db.income.bulkAdd(cloudShard.income);
-  if (cloudShard.expenses?.length) await db.expenses.bulkAdd(cloudShard.expenses);
-  if (cloudShard.debts?.length) await db.debts.bulkAdd(cloudShard.debts);
+  if (cloudShard.income?.length) {
+    console.log(`[loadShardIntoDb] Adding ${cloudShard.income.length} income entries`);
+    await db.income.bulkAdd(cloudShard.income);
+  }
+  if (cloudShard.expenses?.length) {
+    console.log(`[loadShardIntoDb] Adding ${cloudShard.expenses.length} expense entries`);
+    await db.expenses.bulkAdd(cloudShard.expenses);
+  }
+  if (cloudShard.debts?.length) {
+    console.log(`[loadShardIntoDb] Adding ${cloudShard.debts.length} debt entries`);
+    await db.debts.bulkAdd(cloudShard.debts);
+  }
 
+  console.log(`[loadShardIntoDb] Finished loading shard for ${monthYear}`);
   return true;
 }
 
@@ -81,8 +97,22 @@ export async function syncMonthShard(
 
   if (!fileId) {
     await createDataFile(token, activePayload, shardName);
-    return;
+  } else {
+    await updateDataFile(token, fileId, activePayload);
   }
 
-  await updateDataFile(token, fileId, activePayload);
+  // After syncing shard, ensure metadata has this month listed
+  const metaId = await findDataFile(token, 'metadata.json');
+  if (metaId) {
+    const cloudMeta = (await downloadDataFile(token, metaId)) as { monthMarkers?: string[] };
+    const monthMarkers = Array.isArray(cloudMeta?.monthMarkers) ? cloudMeta.monthMarkers : [];
+    
+    // Add month if not already in list
+    if (!monthMarkers.includes(selectedMonthYear)) {
+      monthMarkers.push(selectedMonthYear);
+      monthMarkers.sort((a, b) => b.localeCompare(a));
+      await updateDataFile(token, metaId, { monthMarkers });
+      console.log(`[syncMonthShard] Updated metadata with month: ${selectedMonthYear}`);
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useWealthStore } from './store/useWealthStore';
+import { db } from './db';
 import { GoogleAuthButton } from './components/GoogleAuth';
 import { AppHeader } from './components/AppHeader';
 import { AccountingPeriodsNav } from './components/AccountingPeriodsNav';
@@ -9,6 +10,12 @@ import { SyncToast } from './components/SyncToast';
 import { PurgeModal } from './components/PurgeModal';
 import { UndoSnackbar } from './components/UndoSnackbar';
 import { PRESSABLE_SOFT_CLASS } from './util/pressable';
+
+// Expose to console for debugging
+if (typeof window !== 'undefined') {
+  (window as any).debugStore = useWealthStore;
+  (window as any).debugDb = db;
+}
 
 function App() {
   const {
