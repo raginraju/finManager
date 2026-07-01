@@ -10,6 +10,7 @@ export interface WealthState {
   selectedMonthYear: string;
   availableMonths: string[];
   syncStatus: 'idle' | 'syncing' | 'saved';
+  lastSyncedAt: number | null;
   isHydrating: boolean;
 
   fetchInitialData: () => Promise<void>;

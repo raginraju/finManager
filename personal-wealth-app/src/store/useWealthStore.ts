@@ -1,8 +1,44 @@
 import { create } from 'zustand';
-import { db, type MonthMarker } from '../db';
-import { findDataFile, downloadDataFile, createDataFile, updateDataFile } from '../gdriveService';
+import { db } from '../db';
+import { findDataFile, updateDataFile } from '../gdriveService';
 import { type WealthState } from './types';
 import * as utils from './helpers';
+import { ensureAndReadMetadata, upsertMetadata, loadShardIntoDb, syncMonthShard } from './cloudSync';
+
+const AUTOSYNC_DEBOUNCE_MS = 1200;
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+function queueAutoSync(syncAction: () => Promise<void>): void {
+  if (autoSyncTimer) {
+    clearTimeout(autoSyncTimer);
+  }
+
+  autoSyncTimer = setTimeout(() => {
+    void syncAction();
+    autoSyncTimer = null;
+  }, AUTOSYNC_DEBOUNCE_MS);
+}
+
+async function readLocalSnapshot() {
+  const [income, expenses, debts, markers] = await Promise.all([
+    db.income.toArray(),
+    db.expenses.toArray(),
+    db.debts.toArray(),
+    db.monthMarkers.toArray(),
+  ]);
+
+  const monthMarkers = markers.map((m) => m.monthYear);
+  const availableMonths = utils.recalculateAvailableMonths(income, expenses, debts, monthMarkers);
+
+  return { income, expenses, debts, monthMarkers, availableMonths };
+}
+
+async function clearCloudMonthShard(token: string, monthYear: string): Promise<void> {
+  const shardId = await findDataFile(token, `ledger_${monthYear}.json`);
+  if (shardId) {
+    await updateDataFile(token, shardId, { income: [], expenses: [], debts: [] });
+  }
+}
 
 export const useWealthStore = create<WealthState>((set, get) => ({
   income: [],
@@ -15,6 +51,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   selectedMonthYear: utils.getNowString(),
   availableMonths: [utils.getNowString()],
   syncStatus: 'idle',
+  lastSyncedAt: null,
   isHydrating: false,
 
   // ========================================================
@@ -22,17 +59,11 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   // ========================================================
   fetchInitialData: async () => {
     // 1. Instantly paint whatever is cached locally in IndexedDB for 0ms UI blocking
-    const [income, expenses, debts, monthMarkers] = await Promise.all([
-      db.income.toArray(), db.expenses.toArray(), db.debts.toArray(), db.monthMarkers.toArray(),
-    ]);
-    const markerMonths = monthMarkers.map((m) => m.monthYear);
-    const months = utils.recalculateAvailableMonths(income, expenses, debts, markerMonths);
+    const localSnapshot = await readLocalSnapshot();
     const activePeriod = get().selectedMonthYear || utils.getNowString();
     
     set({
-      income, expenses, debts,
-      monthMarkers: markerMonths,
-      availableMonths: months,
+      ...localSnapshot,
       selectedMonthYear: activePeriod,
       isLoading: false
     });
@@ -42,53 +73,13 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
     set({ isHydrating: true });
     try {
-      // 2. Load Global Index Meta File
-      const metaId = await findDataFile(token, 'metadata.json');
-      let currentCloudMarkers: string[] = [];
-      
-      if (metaId) {
-        const cloudMeta = await downloadDataFile(token, metaId);
-        if (cloudMeta?.monthMarkers?.length) {
-          currentCloudMarkers = cloudMeta.monthMarkers;
-          const markerPayload: MonthMarker[] = currentCloudMarkers.map((m) => ({ monthYear: m }));
-          await db.monthMarkers.bulkPut(markerPayload);
-        }
-      } else {
-        // If app is fresh, establish metadata.json initialization file anchor
-        await createDataFile(token, { monthMarkers: markerMonths }, 'metadata.json');
-        currentCloudMarkers = markerMonths;
-      }
-
-      // 3. Load Active Shard File Only
-      const shardName = `ledger_${activePeriod}.json`;
-      const shardId = await findDataFile(token, shardName);
-
-      if (shardId) {
-        const cloudShard = await downloadDataFile(token, shardId);
-        if (cloudShard) {
-          // Clear active target month rows locally to ensure clean overwritten integration
-          await Promise.all([
-            db.income.where('monthYear').equals(activePeriod).delete(),
-            db.expenses.where('monthYear').equals(activePeriod).delete(),
-            db.debts.where('monthYear').equals(activePeriod).delete(),
-          ]);
-
-          if (cloudShard.income?.length) await db.income.bulkAdd(cloudShard.income);
-          if (cloudShard.expenses?.length) await db.expenses.bulkAdd(cloudShard.expenses);
-          if (cloudShard.debts?.length) await db.debts.bulkAdd(cloudShard.debts);
-        }
-      }
+      // 2. Load index metadata and 3. load active monthly shard
+      await ensureAndReadMetadata(token, localSnapshot.monthMarkers);
+      await loadShardIntoDb(token, activePeriod);
 
       // Re-read storage lines to paint fresh metrics on screen
-      const [freshInc, freshExp, freshDebt, freshMarkers] = await Promise.all([
-        db.income.toArray(), db.expenses.toArray(), db.debts.toArray(), db.monthMarkers.toArray()
-      ]);
-      const freshStrings = freshMarkers.map((m) => m.monthYear);
-
-      set({
-        income: freshInc, expenses: freshExp, debts: freshDebt, monthMarkers: freshStrings,
-        availableMonths: utils.recalculateAvailableMonths(freshInc, freshExp, freshDebt, freshStrings),
-      });
+      const freshSnapshot = await readLocalSnapshot();
+      set(freshSnapshot);
 
     } catch (err) {
       console.error("Failed to load sharded source of truth:", err);
@@ -114,27 +105,11 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
     set({ isHydrating: true });
     try {
-      const shardName = `ledger_${monthYear}.json`;
-      const shardId = await findDataFile(token, shardName);
-      
-      if (shardId) {
-        const cloudShard = await downloadDataFile(token, shardId);
-        if (cloudShard) {
-          await Promise.all([
-            db.income.where('monthYear').equals(monthYear).delete(),
-            db.expenses.where('monthYear').equals(monthYear).delete(),
-            db.debts.where('monthYear').equals(monthYear).delete(),
-          ]);
+      const loaded = await loadShardIntoDb(token, monthYear);
 
-          if (cloudShard.income?.length) await db.income.bulkAdd(cloudShard.income);
-          if (cloudShard.expenses?.length) await db.expenses.bulkAdd(cloudShard.expenses);
-          if (cloudShard.debts?.length) await db.debts.bulkAdd(cloudShard.debts);
-
-          const [income, expenses, debts] = await Promise.all([
-            db.income.toArray(), db.expenses.toArray(), db.debts.toArray()
-          ]);
-          set({ income, expenses, debts });
-        }
+      if (loaded) {
+        const refreshed = await readLocalSnapshot();
+        set({ ...refreshed, selectedMonthYear: monthYear });
       }
     } catch (err) {
       console.error(`Failed lazy loading shard for period ${monthYear}:`, err);
@@ -167,20 +142,17 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       }
     }
 
-    const [income, expenses, debts, markers] = await Promise.all([db.income.toArray(), db.expenses.toArray(), db.debts.toArray(), db.monthMarkers.toArray()]);
-    const markerStrings = markers.map(m => m.monthYear);
+    const snapshot = await readLocalSnapshot();
     
     set({ 
-      income, expenses, debts, monthMarkers: markerStrings, 
-      availableMonths: utils.recalculateAvailableMonths(income, expenses, debts, markerStrings), 
+      ...snapshot,
       selectedMonthYear: targetMonth 
     });
 
     await get().syncWithCloud();
     const token = get().gdriveToken;
     if (token) {
-      const metaId = await findDataFile(token, 'metadata.json');
-      if (metaId) await updateDataFile(token, metaId, { monthMarkers: markerStrings });
+      await upsertMetadata(token, snapshot.monthMarkers);
     }
   },
 
@@ -196,18 +168,19 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       const snapshot = { monthYear, income: incDel, expenses: expDel, debts: debtDel, markerExists: !!marker, expiresAt: Date.now() + 10000 };
       await Promise.all([db.monthMarkers.delete(monthYear), db.income.where('monthYear').equals(monthYear).delete(), db.expenses.where('monthYear').equals(monthYear).delete(), db.debts.where('monthYear').equals(monthYear).delete()]);
 
-      const [income, expenses, debts, markers] = await Promise.all([db.income.toArray(), db.expenses.toArray(), db.debts.toArray(), db.monthMarkers.toArray()]);
-      const markerStrings = markers.map(m => m.monthYear);
-      const months = utils.recalculateAvailableMonths(income, expenses, debts, markerStrings);
+      const refreshed = await readLocalSnapshot();
 
-      set({ income, expenses, debts, monthMarkers: markerStrings, availableMonths: months, selectedMonthYear: months[0] ?? utils.getNowString(), lastDeletedSnapshot: snapshot });
+      set({
+        ...refreshed,
+        selectedMonthYear: refreshed.availableMonths[0] ?? utils.getNowString(),
+        lastDeletedSnapshot: snapshot,
+      });
       
       const token = get().gdriveToken;
       if (token) {
-        const metaId = await findDataFile(token, 'metadata.json');
-        if (metaId) await updateDataFile(token, metaId, { monthMarkers: markerStrings });
-        const shardId = await findDataFile(token, `ledger_${monthYear}.json`);
-        if (shardId) await updateDataFile(token, shardId, { income: [], expenses: [], debts: [] });
+        await upsertMetadata(token, refreshed.monthMarkers);
+        await clearCloudMonthShard(token, monthYear);
+        set({ lastSyncedAt: Date.now() });
       }
 
       setTimeout(() => { if (get().lastDeletedSnapshot?.expiresAt! <= Date.now()) set({ lastDeletedSnapshot: null }); }, 10100);
@@ -223,16 +196,14 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       if (snapshot.expenses.length) await db.expenses.bulkAdd(snapshot.expenses.map(({ id, ...r }) => r));
       if (snapshot.debts.length) await db.debts.bulkAdd(snapshot.debts.map(({ id, ...r }) => r));
 
-      const [income, expenses, debts, markers] = await Promise.all([db.income.toArray(), db.expenses.toArray(), db.debts.toArray(), db.monthMarkers.toArray()]);
-      const markerStrings = markers.map(m => m.monthYear);
+      const restored = await readLocalSnapshot();
       
-      set({ income, expenses, debts, monthMarkers: markerStrings, availableMonths: utils.recalculateAvailableMonths(income, expenses, debts, markerStrings), selectedMonthYear: snapshot.monthYear, lastDeletedSnapshot: null });
+      set({ ...restored, selectedMonthYear: snapshot.monthYear, lastDeletedSnapshot: null });
       
       await get().syncWithCloud();
       const token = get().gdriveToken;
       if (token) {
-        const metaId = await findDataFile(token, 'metadata.json');
-        if (metaId) await updateDataFile(token, metaId, { monthMarkers: markerStrings });
+        await upsertMetadata(token, restored.monthMarkers);
       }
     } catch (err) { console.error(err); }
   },
@@ -247,21 +218,12 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   syncWithCloud: async () => {
     const { gdriveToken, income, expenses, debts, selectedMonthYear } = get();
     if (!gdriveToken) return;
+    if (get().syncStatus === 'syncing') return;
     set({ syncStatus: 'syncing' });
     try {
-      const shardName = `ledger_${selectedMonthYear}.json`;
-      const fileId = await findDataFile(gdriveToken, shardName);
-      
-      // Isolate current memory arrays down to just the targeted monthly items
-      const activePayload = utils.extractShardPayload(income, expenses, debts, selectedMonthYear);
+      await syncMonthShard(gdriveToken, selectedMonthYear, income, expenses, debts);
 
-      if (!fileId) {
-        await createDataFile(gdriveToken, activePayload, shardName);
-      } else {
-        await updateDataFile(gdriveToken, fileId, activePayload);
-      }
-
-      set({ syncStatus: 'saved' });
+      set({ syncStatus: 'saved', lastSyncedAt: Date.now() });
       setTimeout(() => { if (get().syncStatus === 'saved') set({ syncStatus: 'idle' }); }, 3000);
     } catch (err) {
       console.error(err);
@@ -273,14 +235,13 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     set({ isLoading: true });
     await Promise.all([db.income.clear(), db.expenses.clear(), db.debts.clear(), db.monthMarkers.clear()]);
     const freshMonth = utils.getNowString();
-    set({ income: [], expenses: [], debts: [], monthMarkers: [], availableMonths: [freshMonth], selectedMonthYear: freshMonth });
+    set({ income: [], expenses: [], debts: [], monthMarkers: [], availableMonths: [freshMonth], selectedMonthYear: freshMonth, lastDeletedSnapshot: null });
     
     const token = get().gdriveToken;
     if (token) {
-      const metaId = await findDataFile(token, 'metadata.json');
-      if (metaId) await updateDataFile(token, metaId, { monthMarkers: [freshMonth] });
-      const shardId = await findDataFile(token, `ledger_${freshMonth}.json`);
-      if (shardId) await updateDataFile(token, shardId, { income: [], expenses: [], debts: [] });
+      await upsertMetadata(token, [freshMonth]);
+      await clearCloudMonthShard(token, freshMonth);
+      set({ lastSyncedAt: Date.now() });
     }
     set({ isLoading: false });
   },
@@ -289,27 +250,27 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     await db.expenses.add(expense);
     const updated = await db.expenses.toArray();
     set(state => ({ expenses: updated, availableMonths: utils.recalculateAvailableMonths(state.income, updated, state.debts, state.monthMarkers) }));
-    get().syncWithCloud();
+    queueAutoSync(get().syncWithCloud);
   },
 
   deleteExpense: async (id) => {
     await db.expenses.delete(id);
     const updated = await db.expenses.toArray();
     set(state => ({ expenses: updated, availableMonths: utils.recalculateAvailableMonths(state.income, updated, state.debts, state.monthMarkers) }));
-    get().syncWithCloud();
+    queueAutoSync(get().syncWithCloud);
   },
 
   upsertIncome: async (payload) => {
     await db.income.put(payload as any);
     const updated = await db.income.toArray();
     set(state => ({ income: updated, availableMonths: utils.recalculateAvailableMonths(updated, state.expenses, state.debts, state.monthMarkers) }));
-    get().syncWithCloud();
+    queueAutoSync(get().syncWithCloud);
   },
 
   upsertDebt: async (payload) => {
     await db.debts.put(payload as any);
     const updated = await db.debts.toArray();
     set(state => ({ debts: updated, availableMonths: utils.recalculateAvailableMonths(state.income, state.expenses, updated, state.monthMarkers) }));
-    get().syncWithCloud();
+    queueAutoSync(get().syncWithCloud);
   },
 }));

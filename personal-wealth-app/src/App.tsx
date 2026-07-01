@@ -22,6 +22,9 @@ function App() {
     deleteMonthYear,
     clearAllData,
     gdriveToken,
+    syncWithCloud,
+    syncStatus,
+    lastSyncedAt,
     income,     // 💡 Extract collections from store hook
     expenses,
     debts
@@ -100,6 +103,9 @@ function App() {
           netTakeHome={netTakeHome}
           totalSpent={totalSpent}
           remainingSurplus={remainingSurplus}
+          syncStatus={syncStatus}
+          lastSyncedAt={lastSyncedAt}
+          onManualSync={() => { void syncWithCloud(); }}
         />
 
         {/* Structural View Grid Layout */}
