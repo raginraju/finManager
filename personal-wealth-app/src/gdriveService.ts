@@ -1,8 +1,59 @@
 const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD_API_URL = 'https://www.googleapis.com/upload/drive/v3/files';
+const APP_FOLDER_NAME = 'wealthmanager';
+const DRIVE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 
 interface DriveFileSearchResponse {
   files: Array<{ id: string; name: string }>;
+}
+
+function escapeDriveQueryValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function queryFirstFileId(token: string, rawQuery: string): Promise<string | null> {
+  const query = encodeURIComponent(rawQuery);
+  const response = await fetch(`${DRIVE_API_URL}?q=${query}&spaces=drive`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed querying Google Drive for requested resource.');
+  }
+
+  const data: DriveFileSearchResponse = await response.json();
+  return data.files.length > 0 ? data.files[0].id : null;
+}
+
+async function getOrCreateAppFolder(token: string): Promise<string> {
+  const safeFolderName = escapeDriveQueryValue(APP_FOLDER_NAME);
+  const existingFolderId = await queryFirstFileId(
+    token,
+    `name = '${safeFolderName}' and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
+  );
+
+  if (existingFolderId) {
+    return existingFolderId;
+  }
+
+  const response = await fetch(DRIVE_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: APP_FOLDER_NAME,
+      mimeType: DRIVE_FOLDER_MIME_TYPE,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create Google Drive folder: ${APP_FOLDER_NAME}`);
+  }
+
+  const data: { id: string } = await response.json();
+  return data.id;
 }
 
 /**
@@ -10,15 +61,12 @@ interface DriveFileSearchResponse {
  * 💡 MODIFIED: Added dynamic fileName search lookup criteria
  */
 export async function findDataFile(token: string, fileName: string): Promise<string | null> {
-  const query = encodeURIComponent(`name = '${fileName}' and trashed = false`);
-  const response = await fetch(`${DRIVE_API_URL}?q=${query}&spaces=drive`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!response.ok) throw new Error(`Failed to query Google Drive directory structure for file: ${fileName}`);
-  
-  const data: DriveFileSearchResponse = await response.json();
-  return data.files.length > 0 ? data.files[0].id : null;
+  const folderId = await getOrCreateAppFolder(token);
+  const safeFileName = escapeDriveQueryValue(fileName);
+  return queryFirstFileId(
+    token,
+    `name = '${safeFileName}' and '${folderId}' in parents and trashed = false`,
+  );
 }
 
 /**
@@ -38,9 +86,11 @@ export async function downloadDataFile(token: string, fileId: string): Promise<a
  * 💡 MODIFIED: Added dynamic fileName configuration wrapper parameters
  */
 export async function createDataFile(token: string, payload: any, fileName: string): Promise<string> {
+  const folderId = await getOrCreateAppFolder(token);
   const metadata = {
     name: fileName,
     mimeType: 'application/json',
+    parents: [folderId],
   };
 
   const formData = new FormData();
