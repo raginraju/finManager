@@ -1,21 +1,21 @@
 const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD_API_URL = 'https://www.googleapis.com/upload/drive/v3/files';
-const FILE_NAME = 'wealth-data.json';
 
 interface DriveFileSearchResponse {
   files: Array<{ id: string; name: string }>;
 }
 
 /**
- * Locate the application sandbox data file inside the user's Google Drive.
+ * Locate a specific data file by name inside the user's Google Drive space.
+ * 💡 MODIFIED: Added dynamic fileName search lookup criteria
  */
-export async function findDataFile(token: string): Promise<string | null> {
-  const query = encodeURIComponent(`name = '${FILE_NAME}' and trashed = false`);
+export async function findDataFile(token: string, fileName: string): Promise<string | null> {
+  const query = encodeURIComponent(`name = '${fileName}' and trashed = false`);
   const response = await fetch(`${DRIVE_API_URL}?q=${query}&spaces=drive`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (!response.ok) throw new Error('Failed to query Google Drive directory structure.');
+  if (!response.ok) throw new Error(`Failed to query Google Drive directory structure for file: ${fileName}`);
   
   const data: DriveFileSearchResponse = await response.json();
   return data.files.length > 0 ? data.files[0].id : null;
@@ -34,11 +34,12 @@ export async function downloadDataFile(token: string, fileId: string): Promise<a
 }
 
 /**
- * Create a fresh JSON file in the root of the application sandbox space.
+ * Create a fresh JSON file in the application space using a specific shard identifier name.
+ * 💡 MODIFIED: Added dynamic fileName configuration wrapper parameters
  */
-export async function createDataFile(token: string, payload: any): Promise<string> {
+export async function createDataFile(token: string, payload: any, fileName: string): Promise<string> {
   const metadata = {
-    name: FILE_NAME,
+    name: fileName,
     mimeType: 'application/json',
   };
 
@@ -52,7 +53,7 @@ export async function createDataFile(token: string, payload: any): Promise<strin
     body: formData,
   });
 
-  if (!response.ok) throw new Error('Initial creation sequence rejected by Drive API.');
+  if (!response.ok) throw new Error(`Initial creation sequence rejected by Drive API for target file: ${fileName}`);
   const data = await response.json();
   return data.id;
 }

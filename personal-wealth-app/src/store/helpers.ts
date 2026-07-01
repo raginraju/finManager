@@ -1,5 +1,11 @@
 import { type IncomeSource, type Expense, type DebtLiability } from '../db';
 
+export interface MonthShardPayload {
+  income: IncomeSource[];
+  expenses: Expense[];
+  debts: DebtLiability[];
+}
+
 export const getNowString = (): string => new Date().toISOString().slice(0, 7);
 
 export const toMonthDate = (monthYear: string): Date | null => {
@@ -39,4 +45,23 @@ export const recalculateAvailableMonths = (
   expenses.forEach(e => months.add(e.monthYear));
   debts.forEach(d => months.add(d.monthYear));
   return Array.from(months).sort((a, b) => b.localeCompare(a));
+};
+
+/**
+ * 💡 ADDED FOR SHARDING: Filters global array lists down to a targeted monthly snapshot payload
+ */
+export const extractShardPayload = (
+  income: IncomeSource[],
+  expenses: Expense[],
+  debts: DebtLiability[],
+  targetMonthYear: string
+): MonthShardPayload => {
+  return {
+    income: income.filter((i) => i.monthYear === targetMonthYear),
+    expenses: expenses.filter((e) => e.category === 'Food' 
+      ? e.monthYear === targetMonthYear 
+      : e.monthYear === targetMonthYear
+    ),
+    debts: debts.filter((d) => d.monthYear === targetMonthYear),
+  };
 };
