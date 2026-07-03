@@ -31,38 +31,34 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     }
 
     try {
-      let db = await getSQLiteEngine();
       const token = get().gdriveToken;
 
-      // If there's no token yet on the very first load, 
-      // do NOT flip isAppBooted to true. Exit early and let the token hook handle it.
+      // 1. If there's no token yet on initial load/reload, exit early.
+      // Do not lock isAppBooted. Let the App.tsx useEffect try again when the token arrives.
       if (!token && !isAppBooted) {
-        // Just load whatever is locally in memory for now, but don't lock the boot status
         isFetchingInitialData = false;
         set({ isLoading: false });
         return; 
       }
 
-      // Pull from Google Drive if a token is ready during initial boot
+      // 2. REUSE YOUR PULL METHOD: If we have a token and haven't booted yet,
+      // trigger your core pullFromCloud mechanism to download and ingest wealth.db
       if (token && !isAppBooted) {
-        const cloudFileId = await findDataFile(token, 'wealth.db');
-        if (cloudFileId) {
-          const buffer = await downloadBinaryFile(token, cloudFileId);
-          db = await getSQLiteEngine(buffer);
-        }
+        await get().pullFromCloud(); 
       }
 
-      // Flip the application state flag ONLY after a successful cloud integration download
+      // 3. Mark the app as successfully booted
       isAppBooted = true;
 
-      // Query complete month options from data
+      // 4. Fetch the newly populated database engine reference from the store
+      const db = get().db || await getSQLiteEngine();
       const activeMonth = get().selectedMonthYear || utils.getNowString();
       
+      // 5. Query data from the freshly pulled cloud data rows
       const incomeRows = db.exec(`SELECT * FROM income WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
       const expenseRows = db.exec(`SELECT * FROM expenses WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
       const debtRows = db.exec(`SELECT * FROM debts WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
       
-      // Compute month selections dynamically from tables
       const distinctMonths = db.exec(`SELECT DISTINCT monthYear FROM expenses UNION SELECT DISTINCT monthYear FROM income`)[0]?.values || [];
       const monthsList = distinctMonths.map(row => String(row[0])).sort((a, b) => b.localeCompare(a));
 
@@ -75,7 +71,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
         syncStatus: 'idle'
       });
     } catch (err) {
-      console.error(err);
+      console.error("Initialization / Reload process failed:", err);
       set({ isLoading: false, syncStatus: 'error' });
     } finally {
       isFetchingInitialData = false;
