@@ -26,7 +26,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     if (isFetchingInitialData) return;
     isFetchingInitialData = true;
 
-    // 💡 Lock the blocking layout state ONLY during the application's absolute initial boot
     if (!isAppBooted) {
       set({ isLoading: true, syncStatus: 'loading' });
     }
@@ -35,7 +34,16 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       let db = await getSQLiteEngine();
       const token = get().gdriveToken;
 
-      // 💡 Pull from Google Drive strictly on the initial launch sequence, never during quick logging operations
+      // If there's no token yet on the very first load, 
+      // do NOT flip isAppBooted to true. Exit early and let the token hook handle it.
+      if (!token && !isAppBooted) {
+        // Just load whatever is locally in memory for now, but don't lock the boot status
+        isFetchingInitialData = false;
+        set({ isLoading: false });
+        return; 
+      }
+
+      // Pull from Google Drive if a token is ready during initial boot
       if (token && !isAppBooted) {
         const cloudFileId = await findDataFile(token, 'wealth.db');
         if (cloudFileId) {
@@ -44,7 +52,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
         }
       }
 
-      // Flip the application state flag immediately after confirming database ingestion
+      // Flip the application state flag ONLY after a successful cloud integration download
       isAppBooted = true;
 
       // Query complete month options from data
