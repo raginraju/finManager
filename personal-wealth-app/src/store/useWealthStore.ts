@@ -85,6 +85,43 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     await get().fetchInitialData();
   },
 
+  // Mannual pull from cloud sequence to ensure the latest data is reflected in the local SQLite memory
+  pullFromCloud: async () => {
+    const token = get().gdriveToken;
+    if (!token) return;
+
+    set({ syncStatus: 'syncing', isHydrating: true });
+    try {
+      // 1. Force find the cloud file ID to ensure we point to the absolute latest version
+      const cloudFileId = await findDataFile(token, 'wealth.db');
+      
+      if (cloudFileId) {
+        // 2. Clear old state instances by streaming the fresh array buffer down
+        const buffer = await downloadBinaryFile(token, cloudFileId);
+        
+        // 3. Force re-instantiation of the SQLite memory structure using the fresh binary
+        await getSQLiteEngine(buffer);
+        
+        // 4. Force query execution for the active month window to snap elements into view
+        isAppBooted = true; // Ensure state remains booted
+        isFetchingInitialData = false; // Release lock flags
+        
+        set({ isHydrating: false });
+        await get().fetchInitialData();
+        
+        set({ syncStatus: 'saved', lastSyncedAt: Date.now() });
+      } else {
+        console.warn('No active cloud db found to pull from.');
+        set({ syncStatus: 'idle', isHydrating: false });
+      }
+      
+      setTimeout(() => { if (get().syncStatus === 'saved') set({ syncStatus: 'idle' }); }, 3000);
+    } catch (err) {
+      console.error('Failed executing cloud pull sequence:', err);
+      set({ syncStatus: 'error', isHydrating: false });
+    }
+  },
+
   syncWithCloud: async () => {
     const token = get().gdriveToken;
     if (!token) return;

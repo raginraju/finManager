@@ -37,4 +37,5 @@ export interface WealthState {
   deleteExpense: (id: number) => Promise<void>;
   upsertIncome: (income: Omit<IncomeSource, 'id'> & { id?: number }) => Promise<void>;
   upsertDebt: (debt: Omit<DebtLiability, 'id'> & { id?: number }) => Promise<void>;
+  pullFromCloud: () => Promise<void>;
 }

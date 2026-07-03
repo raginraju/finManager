@@ -28,6 +28,7 @@ function App() {
     clearAllData,
     gdriveToken,
     syncWithCloud,
+    pullFromCloud,
     syncStatus,
     lastSyncedAt,
     income,     
@@ -98,13 +99,11 @@ function App() {
     <div className="min-h-screen w-full bg-zinc-950 text-zinc-50 font-sans flex flex-col justify-between selection:bg-zinc-800 selection:text-zinc-100">
 
       <div className="max-w-6xl w-full mx-auto p-6 md:p-8 space-y-6">
-        <AppHeader 
-          netTakeHome={netTakeHome}
-          totalSpent={totalSpent}
-          remainingSurplus={remainingSurplus}
+        <AppHeader
           syncStatus={syncStatus}
           lastSyncedAt={lastSyncedAt}
           onManualSync={() => { void syncWithCloud(); }}
+          onPullSync={() => { void pullFromCloud(); }}
         />
 
         <div className="grid gap-6 md:grid-cols-4 items-start">
@@ -120,7 +119,11 @@ function App() {
           />
 
           <div className="space-y-6 md:col-span-3">
-            <FinancialSummary />
+            <FinancialSummary
+              netTakeHome={netTakeHome}
+              totalSpent={totalSpent}
+              remainingSurplus={remainingSurplus}
+            />
             <DataEntryForms />
           </div>
         </div>
