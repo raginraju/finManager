@@ -1,12 +1,13 @@
-import Dexie, { type Table } from 'dexie';
+import initSqlJs, { type Database } from 'sql.js';
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 export interface IncomeSource {
   id?: number;
   monthYear: string; 
   name: string;
-  grossAmount: number; // Represents direct take-home/cash inflow
+  grossAmount: number;
   netTakeHome: number; 
-  updatedAt: Date;
+  updatedAt: Date | string;
 }
 
 export interface Expense {
@@ -33,26 +34,54 @@ export interface MonthMarker {
   monthYear: string;
 }
 
-class WealthDatabase extends Dexie {
-  income!: Table<IncomeSource>;
-  expenses!: Table<Expense>;
-  debts!: Table<DebtLiability>;
-  monthMarkers!: Table<MonthMarker, string>;
+let dbInstance: Database | null = null;
 
-  constructor() {
-    super('WealthDatabase');
-    this.version(4).stores({
-      income: '++id, monthYear, name',
-      expenses: '++id, monthYear, date, category, isFixed',
-      debts: '++id, monthYear, name, isFixedInstallment',
-      monthMarkers: '&monthYear',
-    });
-    this.version(3).stores({
-      income: '++id, monthYear, name',
-      expenses: '++id, monthYear, date, category, isFixed',
-      debts: '++id, monthYear, name, isFixedInstallment',
-    });
+// Initialize an empty relational database structure with standard schemas
+const createDatabaseTables = (db: Database) => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS income (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      monthYear TEXT NOT NULL,
+      name TEXT NOT NULL,
+      grossAmount REAL NOT NULL,
+      netTakeHome REAL NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      monthYear TEXT NOT NULL,
+      description TEXT NOT NULL,
+      amount REAL NOT NULL,
+      date TEXT NOT NULL,
+      category TEXT NOT NULL,
+      isFixed INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS debts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      monthYear TEXT NOT NULL,
+      name TEXT NOT NULL,
+      totalBalance REAL NOT NULL,
+      monthlyPayment REAL NOT NULL,
+      isFixedInstallment INTEGER NOT NULL
+    );
+  `);
+};
+
+export const getSQLiteEngine = async (binaryBuffer?: ArrayBuffer): Promise<Database> => {
+  if (dbInstance && !binaryBuffer) return dbInstance;
+
+  const SQL = await initSqlJs({
+    locateFile: () => sqlWasmUrl,
+  });
+
+  if (binaryBuffer) {
+    dbInstance = new SQL.Database(new Uint8Array(binaryBuffer));
+  } else {
+    dbInstance = new SQL.Database();
+    createDatabaseTables(dbInstance);
   }
-}
 
-export const db = new WealthDatabase();
+  return dbInstance;
+};

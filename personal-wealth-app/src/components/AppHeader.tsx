@@ -2,7 +2,7 @@ interface AppHeaderProps {
   netTakeHome: number;
   totalSpent: number;
   remainingSurplus: number;
-  syncStatus: 'idle' | 'syncing' | 'saved';
+  syncStatus: 'idle' | 'syncing' | 'loading' | 'saved' | 'error';
   lastSyncedAt: number | null;
   onManualSync: () => void;
 }

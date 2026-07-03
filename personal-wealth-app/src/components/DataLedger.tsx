@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useWealthStore } from '../store/useWealthStore';
-import { db } from '../db';
 import { PRESSABLE_SOFT_CLASS } from '../util/pressable';
 
 export function DataLedger() {
@@ -9,8 +8,9 @@ export function DataLedger() {
     expenses, 
     debts, 
     selectedMonthYear, 
-    syncWithCloud,
-    deleteExpense 
+    deleteExpense,
+    upsertIncome,
+    upsertDebt
   } = useWealthStore();
   
   const [isFoodExpanded, setIsFoodExpanded] = useState(false);
@@ -47,7 +47,7 @@ export function DataLedger() {
     setEditAmount('');
   };
 
-  // 💡 Save updates instantly to local DB, local store state, and Google Drive
+  // 💡 FIXED: Uses Zustand store actions to handle relational SQLite execution workflows smoothly
   const handleSaveEdit = async () => {
     if (!editingId || !editingTable || !editName || !editAmount) return;
     const parsedAmount = parseFloat(editAmount);
@@ -55,31 +55,22 @@ export function DataLedger() {
 
     try {
       if (editingTable === 'income') {
-        const item = income.find(i => i.id === editingId);
-        if (!item) return;
-        const updatedItem = { ...item, name: editName, grossAmount: parsedAmount, netTakeHome: parsedAmount };
-        
-        await db.income.put(updatedItem);
-        useWealthStore.setState({ income: income.map(i => i.id === editingId ? updatedItem : i) });
-
+        await upsertIncome({ id: editingId, monthYear: selectedMonthYear, name: editName, grossAmount: parsedAmount, netTakeHome: parsedAmount, updatedAt: new Date().toISOString() });
       } else if (editingTable === 'debts') {
-        const item = debts.find(d => d.id === editingId);
-        if (!item) return;
-        const updatedItem = { ...item, name: editName, monthlyPayment: parsedAmount };
-        
-        await db.debts.put(updatedItem);
-        useWealthStore.setState({ debts: debts.map(d => d.id === editingId ? updatedItem : d) });
-
+        await upsertDebt({ id: editingId, monthYear: selectedMonthYear, name: editName, totalBalance: 0, monthlyPayment: parsedAmount, isFixedInstallment: false });
       } else if (editingTable === 'expenses') {
         const item = expenses.find(e => e.id === editingId);
         if (!item) return;
-        const updatedItem = { ...item, description: editName, amount: parsedAmount };
-        
-        await db.expenses.put(updatedItem);
-        useWealthStore.setState({ expenses: expenses.map(e => e.id === editingId ? updatedItem : e) });
+        await deleteExpense(editingId); // Re-insert modified row via store context
+        await useWealthStore.getState().addExpense({
+          monthYear: selectedMonthYear,
+          description: editName,
+          amount: parsedAmount,
+          date: item.date,
+          category: item.category,
+          isFixed: item.isFixed
+        });
       }
-
-      await syncWithCloud();
       cancelEditing();
     } catch (err) {
       console.error("Failed to save changes safely:", err);
@@ -89,15 +80,18 @@ export function DataLedger() {
   const handleGlobalDelete = async (table: 'income' | 'expenses' | 'debts', id: number | undefined) => {
     if (!id) return;
     try {
-      await db[table].delete(id);
+      const store = useWealthStore.getState();
       if (table === 'income') {
         useWealthStore.setState({ income: income.filter(item => item.id !== id) });
+        await store.syncWithCloud();
+        await store.fetchInitialData();
       } else if (table === 'debts') {
         useWealthStore.setState({ debts: debts.filter(item => item.id !== id) });
+        await store.syncWithCloud();
+        await store.fetchInitialData();
       } else if (table === 'expenses') {
-        useWealthStore.setState({ expenses: expenses.filter(item => item.id !== id) });
+        await deleteExpense(id);
       }
-      await syncWithCloud();
     } catch (err) {
       console.error("Failed to delete entry:", err);
     }
@@ -225,7 +219,7 @@ export function DataLedger() {
           );
         })}
 
-        {/* ================= FOOD ACCORDION ITEMS (NESTED EDITING) ================= */}
+        {/* ================= FOOD ACCORDION ITEMS ================= */}
         {foodExpenses.length > 0 && (
           <>
             <div 
@@ -292,7 +286,7 @@ export function DataLedger() {
                               Edit
                             </button>
                             <button 
-                              onClick={() => item.id && deleteExpense(item.id)}
+                              onClick={() => item.id && handleGlobalDelete('expenses', item.id)}
                               className={`text-zinc-600 hover:text-red-400 p-1 cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
                             >
                               ✕
@@ -358,7 +352,7 @@ export function DataLedger() {
                       Edit
                     </button>
                     <button 
-                      onClick={() => item.id && deleteExpense(item.id)}
+                      onClick={() => item.id && handleGlobalDelete('expenses', item.id)}
                       className={`text-zinc-500 hover:text-red-400 p-1 cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
                     >
                       ✕

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useWealthStore } from './store/useWealthStore';
-import { db } from './db';
 import { GoogleAuthButton } from './components/GoogleAuth';
 import { AppHeader } from './components/AppHeader';
 import { AccountingPeriodsNav } from './components/AccountingPeriodsNav';
@@ -14,7 +13,6 @@ import { PRESSABLE_SOFT_CLASS } from './util/pressable';
 // Expose to console for debugging
 if (typeof window !== 'undefined') {
   (window as any).debugStore = useWealthStore;
-  (window as any).debugDb = db;
 }
 
 function App() {
@@ -32,7 +30,7 @@ function App() {
     syncWithCloud,
     syncStatus,
     lastSyncedAt,
-    income,     // 💡 Extract collections from store hook
+    income,     
     expenses,
     debts
   } = useWealthStore();
@@ -46,7 +44,7 @@ function App() {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  // 💡 Root-level Metric Computations to pass up to AppHeader
+  // Root-level Metric Computations
   const currentMonthIncome = income.filter(i => i.monthYear === selectedMonthYear);
   const netTakeHome = currentMonthIncome.reduce((sum, i) => sum + i.netTakeHome, 0);
 
@@ -61,7 +59,6 @@ function App() {
   const totalSpent = totalExpenses + totalDebtInstallments;
   const remainingSurplus = netTakeHome - totalSpent;
 
-  // Loader blocker for reading internal local Dexie storage on initialization
   if (isLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-zinc-400">
@@ -70,7 +67,6 @@ function App() {
     );
   }
 
-  // Google Authentication Gate Lock (Preserved to maintain state access)
   if (!gdriveToken) {
     return (
       <div className="min-h-screen w-full bg-zinc-950 text-zinc-50 font-sans flex items-center justify-center px-6">
@@ -82,7 +78,6 @@ function App() {
     );
   }
 
-  // Hydration fallback loader state for cloud download transfers
   if (isHydrating) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-zinc-400">
@@ -102,10 +97,7 @@ function App() {
   return (
     <div className="min-h-screen w-full bg-zinc-950 text-zinc-50 font-sans flex flex-col justify-between selection:bg-zinc-800 selection:text-zinc-100">
 
-      {/* Main Container Content */}
       <div className="max-w-6xl w-full mx-auto p-6 md:p-8 space-y-6">
-
-        {/* 💡 Header Block — Now rendering calculations dynamically above the border line */}
         <AppHeader 
           netTakeHome={netTakeHome}
           totalSpent={totalSpent}
@@ -115,10 +107,7 @@ function App() {
           onManualSync={() => { void syncWithCloud(); }}
         />
 
-        {/* Structural View Grid Layout */}
         <div className="grid gap-6 md:grid-cols-4 items-start">
-
-          {/* Navigation Blocks & Period Operations Form Side panel */}
           <AccountingPeriodsNav
             availableMonths={availableMonths}
             selectedMonthYear={selectedMonthYear}
@@ -130,16 +119,13 @@ function App() {
             onDeleteMonth={(monthYear) => deleteMonthYear(monthYear)}
           />
 
-          {/* Core Dashboards Tier — Clutter free workspace cards */}
           <div className="space-y-6 md:col-span-3">
             <FinancialSummary />
             <DataEntryForms />
           </div>
-
         </div>
       </div>
 
-      {/* Footer Block with Relocated Purge Action */}
       <footer className="w-full border-t border-zinc-900 py-6 px-8 text-center bg-zinc-950">
         <button
           onClick={() => setIsModalOpen(true)}
@@ -149,7 +135,6 @@ function App() {
         </button>
       </footer>
 
-      {/* Custom Destructive Confirmation Modal Overlay */}
       <PurgeModal
         isOpen={isModalOpen}
         confirmText={confirmText}
@@ -161,7 +146,6 @@ function App() {
         onConfirm={handleExecutePurge}
       />
       
-      {/* Background Global Triggers */}
       <SyncToast /> 
       <UndoSnackbar />
     </div>

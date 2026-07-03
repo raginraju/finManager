@@ -9,7 +9,9 @@ export interface WealthState {
   gdriveToken: string | null;
   selectedMonthYear: string;
   availableMonths: string[];
-  syncStatus: 'idle' | 'syncing' | 'saved';
+
+  syncStatus: 'idle' | 'syncing' | 'loading' | 'saved' | 'error';
+  
   lastSyncedAt: number | null;
   isHydrating: boolean;
 

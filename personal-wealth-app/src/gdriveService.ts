@@ -81,8 +81,7 @@ async function getOrCreateAppFolder(token: string): Promise<string> {
 }
 
 /**
- * Locate a specific data file by name inside the user's Google Drive space.
- * 💡 MODIFIED: Added dynamic fileName search lookup criteria
+ * Locate a specific data file by name inside the application's Google Drive folder.
  */
 export async function findDataFile(token: string, fileName: string): Promise<string | null> {
   const folderId = await getOrCreateAppFolder(token);
@@ -94,62 +93,56 @@ export async function findDataFile(token: string, fileName: string): Promise<str
 }
 
 /**
- * Retrieve the contents of a specific JSON file via its unique File ID.
+ * Downloads the binary file (wealth.db) from Google Drive as a raw ArrayBuffer.
  */
-export async function downloadDataFile(token: string, fileId: string): Promise<any> {
+export async function downloadBinaryFile(token: string, fileId: string): Promise<ArrayBuffer> {
   const response = await fetch(`${DRIVE_API_URL}/${fileId}?alt=media`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (!response.ok) throw new Error('Failed to stream data payload down from Drive storage.');
-  return await response.json();
+  if (!response.ok) {
+    throw new Error('Failed to download binary SQLite database from Google Drive.');
+  }
+  
+  return await response.arrayBuffer();
 }
 
 /**
- * Create a fresh JSON file in the application space using a specific shard identifier name.
- * 💡 MODIFIED: Check if file exists first, return existing ID if found
+ * Uploads or overwrites the SQLite database file in your Google Drive sandbox.
+ * Handles both the initial creation (POST) and atomic updates (PATCH).
  */
-export async function createDataFile(token: string, payload: any, fileName: string): Promise<string> {
-  // Check if file already exists
-  const existingFileId = await findDataFile(token, fileName);
-  if (existingFileId) {
-    return existingFileId;
-  }
-
+export async function uploadBinaryFile(
+  token: string, 
+  filename: string, 
+  arrayBuffer: Uint8Array, 
+  fileId?: string | null
+): Promise<string> {
   const folderId = await getOrCreateAppFolder(token);
+  
   const metadata = {
-    name: fileName,
-    mimeType: 'application/json',
-    parents: [folderId],
+    name: filename,
+    mimeType: 'application/octet-stream',
+    ...(fileId ? {} : { parents: [folderId] }), // Parent parameter is only required for initial creation
   };
 
   const formData = new FormData();
   formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  formData.append('file', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+  formData.append('file', new Blob([arrayBuffer as BlobPart], { type: 'application/octet-stream' }));
 
-  const response = await fetch(`${UPLOAD_API_URL}?uploadType=multipart`, {
-    method: 'POST',
+  const url = fileId 
+    ? `${UPLOAD_API_URL}/${fileId}?uploadType=multipart`
+    : `${UPLOAD_API_URL}?uploadType=multipart`;
+
+  const response = await fetch(url, {
+    method: fileId ? 'PATCH' : 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
   });
 
-  if (!response.ok) throw new Error(`Initial creation sequence rejected by Drive API for target file: ${fileName}`);
+  if (!response.ok) {
+    throw new Error(`Failed pushing SQLite binary asset to cloud core destination. Status: ${response.status}`);
+  }
+  
   const data = await response.json();
   return data.id;
-}
-
-/**
- * Perform a destructive atomic overwrite of an existing file ID with modern payloads.
- */
-export async function updateDataFile(token: string, fileId: string, payload: any): Promise<void> {
-  const response = await fetch(`${UPLOAD_API_URL}/${fileId}?uploadType=media`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) throw new Error('File sync overwrite execution failed.');
 }
