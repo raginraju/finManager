@@ -233,9 +233,11 @@ export function DataLedger() {
                   Food Summary <span className="text-[11px] text-zinc-500 font-normal">({foodExpenses.length} items)</span>
                 </span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-red-400 font-bold">-${totalFoodSum.toFixed(2)}</span>
-                <span className="text-[10px] text-zinc-500 px-1 font-medium bg-zinc-800/60 rounded border border-zinc-700/50 uppercase">
+              <div className="flex items-center gap-2 sm:gap-4 shrink-0 text-right">
+                <span className="text-red-400 font-bold font-mono whitespace-nowrap text-xs sm:text-sm">
+                  -${totalFoodSum.toFixed(2)}
+                </span>
+                <span className="text-[9px] sm:text-[10px] text-zinc-500 px-1 py-0.5 font-medium bg-zinc-800/60 rounded border border-zinc-700/50 uppercase select-none shrink-0">
                   {isFoodExpanded ? 'Hide' : 'View'}
                 </span>
               </div>
