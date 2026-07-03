@@ -16,7 +16,8 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'node', // Use 'node' since we are testing pure logic/Zustand store state first
+    environment: 'node', 
+    setupFiles: ['./src/tests/setup.ts']
   },
   build: {
     chunkSizeWarningLimit: 800,

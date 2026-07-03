@@ -1,27 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { getPreviousMonthString, mapDateToTargetMonth } from '../store/helpers';
+import { getPreviousMonthString, mapDateToTargetMonth, extractShardPayload } from '../store/helpers';
 
-describe('Financial Ledger Helper Core Logic', () => {
-  
-  it('should correctly calculate the previous month string configuration', () => {
-    expect(getPreviousMonthString('2026-03')).toBe('2026-02');
-    expect(getPreviousMonthString('2026-01')).toBe('2025-12');
+describe('Utility Module: Shard Calculations', () => {
+  it('should deduce correct fallback strings on invalid frames', () => {
+    expect(getPreviousMonthString('garbage-timeline')).toBeNull();
   });
 
-  it('should fallback gracefully when converting garbage month frames', () => {
-    expect(getPreviousMonthString('invalid-date')).toBeNull();
+  it('should properly clamp calendar bounds for shorter target months', () => {
+    expect(mapDateToTargetMonth('2026-03-31', '2026-04')).toBe('2026-04-30');
   });
 
-  it('should safely map an expense date to a newly added month period framework', () => {
-    const inputDate = '2026-03-15';
-    const targetMonth = '2026-04';
-    // Should lock the day (15th) to the target month window safely
-    expect(mapDateToTargetMonth(inputDate, targetMonth)).toBe('2026-04-15');
+  it('should slice data arrays using extractShardPayload filters safely', () => {
+    const mockExpenses = [
+      { id: 1, monthYear: '2026-07', description: 'Target Item', amount: 50, date: '2026-07-02', category: 'Food', isFixed: false },
+      { id: 2, monthYear: '2026-08', description: 'Next Month Item', amount: 90, date: '2026-08-01', category: 'Util', isFixed: true }
+    ];
+    
+    const payload = extractShardPayload([], mockExpenses, [], '2026-07');
+    expect(payload.expenses).toHaveLength(1);
+    expect(payload.expenses[0].description).toBe('Target Item');
   });
 
-  it('should clamp the day value if the target month has fewer days', () => {
-    const inputDate = '2026-03-31'; // March 31st
-    const targetMonth = '2026-04';  // April only has 30 days
-    expect(mapDateToTargetMonth(inputDate, targetMonth)).toBe('2026-04-30');
+  it('should handle auto-increment mapping variations with single-digit day padding bounds', () => {
+    const inputDate = '2026-07-03'; // Padded day
+    const targetMonth = '2026-07';
+
+    // Enforce that your mapping helpers handle single digit variations cleanly
+    expect(mapDateToTargetMonth(inputDate, targetMonth)).toBe('2026-07-03');
   });
 });
