@@ -14,6 +14,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   debts: [],
   monthMarkers: [],
   lastDeletedSnapshot: null,
+  db: null,
   isLoading: true, // Remains true initially to catch first load sequence execution
   gdriveToken: null,
   selectedMonthYear: utils.getNowString(),
@@ -60,12 +61,36 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       const debtRows = db.exec(`SELECT * FROM debts WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
       
       const distinctMonths = db.exec(`SELECT DISTINCT monthYear FROM expenses UNION SELECT DISTINCT monthYear FROM income`)[0]?.values || [];
-      const monthsList = distinctMonths.map(row => String(row[0])).sort((a, b) => b.localeCompare(a));
+      const monthsList = distinctMonths
+        .map((row: any[]) => String(row[0]))
+        .sort((a: string, b: string) => b.localeCompare(a));
 
       set({
-        income: incomeRows.map(r => ({ id: Number(r[0]), monthYear: String(r[1]), name: String(r[2]), grossAmount: Number(r[3]), netTakeHome: Number(r[4]), updatedAt: new Date(String(r[5])) })),
-        expenses: expenseRows.map(r => ({ id: Number(r[0]), monthYear: String(r[1]), description: String(r[2]), amount: Number(r[3]), date: String(r[4]), category: String(r[5]), isFixed: Boolean(r[6]) })),
-        debts: debtRows.map(r => ({ id: Number(r[0]), monthYear: String(r[1]), name: String(r[2]), totalBalance: Number(r[3]), monthlyPayment: Number(r[4]), isFixedInstallment: Boolean(r[5]) })),
+        income: incomeRows.map((r: any[]) => ({
+          id: Number(r[0]),
+          monthYear: String(r[1]),
+          name: String(r[2]),
+          grossAmount: Number(r[3]),
+          netTakeHome: Number(r[4]),
+          updatedAt: new Date(String(r[5]))
+        })),
+        expenses: expenseRows.map((r: any[]) => ({
+          id: Number(r[0]),
+          monthYear: String(r[1]),
+          description: String(r[2]),
+          amount: Number(r[3]),
+          date: String(r[4]),
+          category: String(r[5]),
+          isFixed: Boolean(r[6])
+        })),
+        debts: debtRows.map((r: any[]) => ({
+          id: Number(r[0]),
+          monthYear: String(r[1]),
+          name: String(r[2]),
+          totalBalance: Number(r[3]),
+          monthlyPayment: Number(r[4]),
+          isFixedInstallment: Boolean(r[5])
+        })),
         availableMonths: monthsList.length ? monthsList : [activeMonth],
         isLoading: false,
         syncStatus: 'idle'

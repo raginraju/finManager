@@ -5,6 +5,7 @@ export interface WealthState {
   expenses: Expense[];
   debts: DebtLiability[];
   monthMarkers: string[];
+  db: any;
   isLoading: boolean;
   gdriveToken: string | null;
   selectedMonthYear: string;
