@@ -15,6 +15,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   monthMarkers: [],
   lastDeletedSnapshot: null,
   db: null,
+  isHydratedFromCloud: false,
   isLoading: true, // Remains true initially to catch first load sequence execution
   gdriveToken: null,
   selectedMonthYear: utils.getNowString(),
@@ -46,6 +47,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       // trigger your core pullFromCloud mechanism to download and ingest wealth.db
       if (token && !isAppBooted) {
         await get().pullFromCloud(); 
+        set({ isHydratedFromCloud: true });
       }
 
       // 3. Mark the app as successfully booted
@@ -153,12 +155,20 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
   syncWithCloud: async () => {
     const token = get().gdriveToken;
-    if (!token) return;
+    const isHydrated = get().isHydratedFromCloud;
+
+    // ❌ CRITICAL GUARD: If the token is missing OR the app hasn't completed 
+    // downloading your data from the cloud yet, STOP immediately. Do not overwrite!
+    if (!token || !isHydrated) {
+      console.warn("Cloud upload blocked: App has not successfully downloaded your data yet.");
+      return;
+    }
 
     // Changes state for background status markers without interrupting client focus workflows
     set({ syncStatus: 'syncing' });
     try {
-      const db = await getSQLiteEngine();
+      // Get the live active database instance instead of re-fetching a clean engine reference
+      const db = get().db || await getSQLiteEngine();
       const binaryArray = db.export(); // Package database to binary
       
       const fileId = await findDataFile(token, 'wealth.db');

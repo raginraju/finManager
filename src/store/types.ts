@@ -6,6 +6,7 @@ export interface WealthState {
   debts: DebtLiability[];
   monthMarkers: string[];
   db: any;
+  isHydratedFromCloud: boolean;
   isLoading: boolean;
   gdriveToken: string | null;
   selectedMonthYear: string;
