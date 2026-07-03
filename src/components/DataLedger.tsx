@@ -226,12 +226,19 @@ export function DataLedger() {
               onClick={() => setIsFoodExpanded(!isFoodExpanded)}
               className="flex items-center justify-between p-3 bg-zinc-900/10 hover:bg-zinc-900/30 transition-colors cursor-pointer border-l-2 border-amber-500/50 select-none"
             >
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-zinc-500 w-3 text-center">{isFoodExpanded ? '▼' : '▶'}</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">FOOD</span>
-                <span className="text-zinc-100 font-semibold">
-                  Food Summary <span className="text-[11px] text-zinc-500 font-normal">({foodExpenses.length} items)</span>
-                </span>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-[10px] font-mono text-zinc-500 w-3 shrink-0">{isFoodExpanded ? '▼' : '▶'}</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">FOOD</span>
+                
+                
+                <div className="flex flex-col min-w-0 leading-tight">
+                  <span className="text-zinc-100 font-semibold truncate text-xs sm:text-sm">
+                    Food Summary
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-normal">
+                    ({foodExpenses.length} {foodExpenses.length === 1 ? 'item' : 'items'})
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-2 sm:gap-4 shrink-0 text-right">
                 <span className="text-red-400 font-bold font-mono whitespace-nowrap text-xs sm:text-sm">
