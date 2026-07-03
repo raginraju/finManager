@@ -42,8 +42,19 @@ function App() {
   const [newMonthYear, setNewMonthYear] = useState(() => new Date().toISOString().slice(0, 7));
 
   useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
+    const initializeAndPull = async () => {
+      await fetchInitialData();
+      if (gdriveToken) {
+        try {
+          await pullFromCloud();
+        } catch (error) {
+          console.error("Failed to execute background auto-pull framework:", error);
+        }
+      }
+    };
+
+    void initializeAndPull();
+  }, [fetchInitialData, gdriveToken, pullFromCloud]);
 
   // Root-level Metric Computations
   const currentMonthIncome = income.filter(i => i.monthYear === selectedMonthYear);
@@ -103,7 +114,7 @@ function App() {
           syncStatus={syncStatus}
           lastSyncedAt={lastSyncedAt}
           onManualSync={() => { void syncWithCloud(); }}
-          onPullSync={() => { void pullFromCloud(); }}
+          onPullSync={() => { void pullFromCloud(); }} 
         />
 
         <div className="grid gap-6 md:grid-cols-4 items-start">
