@@ -1,0 +1,41 @@
+name: Deploy finManager Production Node
+
+on:
+  push:
+    branches:
+      - main  # Triggers the pipeline automatically when you push to main
+
+permissions:
+  contents: write  # Required by the gh-pages deployment engine to commit the dist assets
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'  # Automatically caches your dependencies for ultra-fast run times
+
+      - name: Install Project Dependencies
+        run: npm ci  # Performs a clean, deterministic install using package-lock.json
+
+      - name: Execute Automated Unit Test Suite
+        run: npm test  # 💡 Runs your Vitest test suite. If any tests fail, the build halts instantly to protect production.
+
+      - name: Run Build Core Execution
+        run: npm run build  # Runs tsc compiler verify & compiles the production distribution directory
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+
+      - name: Deploy Compiled Matrix Assets to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist  # Deploys the static output folder built by Vite
+          branch: gh-pages  # The target destination branch that serves your live web portal
+          clean: true  # Automatically removes obsolete files from previous deployments

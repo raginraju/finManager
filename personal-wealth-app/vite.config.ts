@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
@@ -14,7 +14,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  // 💡 REMOVED optimizeDeps.exclude to let Vite pre-bundle sql.js perfectly
+  test: {
+    globals: true,
+    environment: 'node', // Use 'node' since we are testing pure logic/Zustand store state first
+  },
   build: {
     chunkSizeWarningLimit: 800,
     rollupOptions: {

@@ -29,8 +29,13 @@ export const mapDateToTargetMonth = (dateValue: string, targetMonthYear: string)
   if (!year || !month) return dateValue;
 
   const daysInTargetMonth = new Date(year, month, 0).getDate();
-  const day = Math.min(sourceDate.getDate(), daysInTargetMonth);
-  return new Date(year, month - 1, day).toISOString().split('T')[0];
+  const dayMatch = dateValue.match(/-(\d{2})$/);
+  const sourceDay = dayMatch ? parseInt(dayMatch[1], 10) : sourceDate.getDate();
+  const day = Math.min(sourceDay, daysInTargetMonth);
+  const paddedMonth = String(month).padStart(2, '0');
+  const paddedDay = String(day).padStart(2, '0');
+
+  return `${year}-${paddedMonth}-${paddedDay}`;
 };
 
 export const recalculateAvailableMonths = (
