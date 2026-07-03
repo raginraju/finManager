@@ -22,7 +22,7 @@ export function AccountingPeriodsNav({
   onDeleteMonth,
 }: AccountingPeriodsNavProps) {
   return (
-    <div className="space-y-2 md:col-span-1">
+    <div className="space-y-2 md:col-span-1 min-w-0 w-full">
       <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 px-2 mb-3">Accounting Periods</p>
 
       <div className="rounded-md border border-zinc-800 bg-zinc-900/40 p-2 space-y-2">
@@ -57,43 +57,45 @@ export function AccountingPeriodsNav({
         </div>
       </div>
 
-      <div className="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0">
-        {availableMonths.map((monthStr) => {
-          const isActive = selectedMonthYear === monthStr;
-          const [year, month] = monthStr.split('-');
-          const dateObj = new Date(parseInt(year), parseInt(month) - 1);
-          const displayLabel = dateObj.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+      <div className="w-full overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 touch-pan-x">
+        <div className="flex flex-row md:flex-col gap-1 w-full">
+          {availableMonths.map((monthStr) => {
+            const isActive = selectedMonthYear === monthStr;
+            const [year, month] = monthStr.split('-');
+            const dateObj = new Date(parseInt(year), parseInt(month) - 1);
+            const displayLabel = dateObj.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
 
-          return (
-            <div key={monthStr} className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  onSelectMonth(monthStr);
-                }}
-                className={`flex-1 text-left px-3 py-2 text-xs font-medium rounded-md ${PRESSABLE_CLASS} cursor-pointer ${isActive
-                  ? 'bg-zinc-100 text-zinc-900 font-semibold shadow-sm'
-                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-                  }`}
-              >
-                {displayLabel}
-              </button>
-              <button
-                title={`Delete ${displayLabel}`}
-                onClick={() => {
-                  // Simple confirm prompt before deleting
-                  // eslint-disable-next-line no-restricted-globals
-                  if (confirm(`Delete ${displayLabel}? This will remove all records for this month.`)) {
-                    void onDeleteMonth(monthStr);
-                  }
-                }}
-                className={`text-xs text-red-400 hover:text-red-500 px-2 py-1 rounded-md ${PRESSABLE_SOFT_CLASS}`}
-              >
-                ×
-              </button>
-            </div>
-          );
-        })}
+            return (
+              <div key={monthStr} className="flex items-center gap-2 shrink-0 select-none">
+                <button
+                  onClick={() => {
+                    onSelectMonth(monthStr);
+                  }}
+                  className={`px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap ${PRESSABLE_CLASS} cursor-pointer ${isActive
+                    ? 'bg-zinc-100 text-zinc-900 font-semibold shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+                    }`}
+                >
+                  {displayLabel}
+                </button>
+                <button
+                  title={`Delete ${displayLabel}`}
+                  onClick={() => {
+                    // eslint-disable-next-line no-restricted-globals
+                    if (confirm(`Delete ${displayLabel}? This will remove all records for this month.`)) {
+                      void onDeleteMonth(monthStr);
+                    }
+                  }}
+                  className={`text-xs text-red-400 hover:text-red-500 px-2 py-1 rounded-md shrink-0 ${PRESSABLE_SOFT_CLASS}`}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
+
     </div>
   );
 }
