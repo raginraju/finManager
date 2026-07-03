@@ -32,7 +32,10 @@ export function AccountingPeriodsNav({
           onChange={(e) => {
             onNewMonthYearChange(e.target.value);
           }}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
+          className="w-full min-w-0 block bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 application-none"
+          style={{
+            WebkitAppearance: 'none', // Overrides iOS system appearance
+          }}
         />
         <div className="grid grid-cols-2 gap-2">
           <button
