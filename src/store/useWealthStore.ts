@@ -153,13 +153,13 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     }
   },
 
-  syncWithCloud: async () => {
+  syncWithCloud: async (isForce = false) => {
     const token = get().gdriveToken;
     const isHydrated = get().isHydratedFromCloud;
 
     // ❌ CRITICAL GUARD: If the token is missing OR the app hasn't completed 
     // downloading your data from the cloud yet, STOP immediately. Do not overwrite!
-    if (!token || !isHydrated) {
+    if (!token || !isHydrated && !isForce) {
       console.warn("Cloud upload blocked: App has not successfully downloaded your data yet.");
       return;
     }
@@ -242,8 +242,45 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
   // Interface Fallbacks placeholders to align types.ts cleanly
   addMonthYear: async (monthYear) => { set({ selectedMonthYear: monthYear }); },
-  deleteMonthYear: async () => {},
+  deleteMonthYear: async (monthYear) => {
+    const db = await getSQLiteEngine();
+    
+    // 1. Clear out all data lines assigned to this month tag
+    db.run(`DELETE FROM expenses WHERE monthYear = ?`, [monthYear]);
+    db.run(`DELETE FROM income WHERE monthYear = ?`, [monthYear]);
+    db.run(`DELETE FROM debts WHERE monthYear = ?`, [monthYear]);
+
+    // 2. Adjust active viewport context fallback selection if you delete the month you are looking at
+    if (get().selectedMonthYear === monthYear) {
+      set({ selectedMonthYear: utils.getNowString() });
+    }
+
+    // 3. Update active layout metrics
+    await get().fetchInitialData();
+
+    // 4. Force synchronization right away to drop data on Drive immediately
+    await get().syncWithCloud(true);
+  },
   undoDeleteMonthYear: async () => {},
-  clearAllData: async () => {},
+  clearAllData: async () => {
+    const db = await getSQLiteEngine();
+    
+    // 1. Wipe out every row across your accounting ledger tables entirely
+    db.run(`DELETE FROM expenses`);
+    db.run(`DELETE FROM income`);
+    db.run(`DELETE FROM debts`);
+
+    // 2. Clear out state states
+    set({
+      income: [],
+      expenses: [],
+      debts: [],
+      availableMonths: [utils.getNowString()],
+      selectedMonthYear: utils.getNowString()
+    });
+
+    // 3. Force push the completely blank database schema update out to Google Drive
+    await get().syncWithCloud(true);
+  },
   hydrateFromCloud: async () => { await get().fetchInitialData(); }
 }));

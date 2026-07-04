@@ -32,7 +32,7 @@ export interface WealthState {
     expiresAt: number;
   };
   undoDeleteMonthYear: () => Promise<void>;
-  syncWithCloud: () => Promise<void>;
+  syncWithCloud: (isForce?: boolean) => Promise<void>;
   clearAllData: () => Promise<void>;
 
   addExpense: (expense: Omit<Expense, 'id'>) => Promise<void>;
