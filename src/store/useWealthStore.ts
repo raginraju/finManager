@@ -232,16 +232,55 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     } else {
       db.run(`INSERT INTO debts (monthYear, name, totalBalance, monthlyPayment, isFixedInstallment) VALUES (?, ?, ?, ?, ?)`, [payload.monthYear, payload.name, payload.totalBalance ?? 0, payload.monthlyPayment, payload.isFixedInstallment ? 1 : 0]);
     }
-    
-    // 1. Instant local refresh
     await get().fetchInitialData();
-    
-    // 2. Background sync
     void get().syncWithCloud();
   },
 
-  // Interface Fallbacks placeholders to align types.ts cleanly
-  addMonthYear: async (monthYear) => { set({ selectedMonthYear: monthYear }); },
+  addMonthYear: async (monthYear, isCopy = false) => {
+    // 1. Capture the currently active screen month BEFORE we switch views
+    const sourceTemplateMonth = get().selectedMonthYear;
+
+    // 2. Advance the UI viewport focus state to the new month path target
+    set({ selectedMonthYear: monthYear });
+
+    if (isCopy && sourceTemplateMonth) {
+      try {
+        const db = await getSQLiteEngine();
+
+        // 3. Clone ALL active Income lines from our active view source state
+        db.run(
+          `INSERT INTO income (monthYear, name, grossAmount, netTakeHome, updatedAt)
+           SELECT ?, name, grossAmount, netTakeHome, ? FROM income WHERE monthYear = ?`,
+          [monthYear, new Date().toISOString(), sourceTemplateMonth]
+        );
+
+        // 4. 💡 FIXED: Clones ALL expenses EXCEPT food items (ignoring case flags)
+        db.run(
+          `INSERT INTO expenses (monthYear, description, amount, date, category, isFixed)
+           SELECT ?, description, amount, ? || SUBSTR(date, 8), category, isFixed 
+           FROM expenses 
+           WHERE monthYear = ? AND (category IS NULL OR LOWER(category) != 'food')`,
+          [monthYear, monthYear, sourceTemplateMonth]
+        );
+
+        // 5. Clone debt installment pipelines, decrementing balances cleanly
+        db.run(
+          `INSERT INTO debts (monthYear, name, totalBalance, monthlyPayment, isFixedInstallment)
+           SELECT ?, name, CASE WHEN totalBalance > monthlyPayment THEN totalBalance - monthlyPayment ELSE 0 END, monthlyPayment, isFixedInstallment 
+           FROM debts WHERE monthYear = ?`,
+          [monthYear, sourceTemplateMonth]
+        );
+
+      } catch (err) {
+        console.error("Failed to accurately duplicate selected month context configuration:", err);
+      }
+    }
+
+    // Refresh UI tracking engines and mirror data state instantly to Google Drive
+    await get().fetchInitialData();
+    void get().syncWithCloud();
+  },
+
   deleteMonthYear: async (monthYear) => {
     const db = await getSQLiteEngine();
     
