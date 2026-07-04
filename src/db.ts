@@ -66,6 +66,12 @@ const createDatabaseTables = (db: Database) => {
       monthlyPayment REAL NOT NULL,
       isFixedInstallment INTEGER NOT NULL
     );
+
+    /* 💡 HIGH-SPEED PERFORMANCE INDEXES */
+    /* Prevents full table scans when switching months, running analytics, or building list tabs */
+    CREATE INDEX IF NOT EXISTS idx_income_monthYear ON income (monthYear);
+    CREATE INDEX IF NOT EXISTS idx_expenses_monthYear ON expenses (monthYear);
+    CREATE INDEX IF NOT EXISTS idx_debts_monthYear ON debts (monthYear);
   `);
 };
 
@@ -78,6 +84,8 @@ export const getSQLiteEngine = async (binaryBuffer?: ArrayBuffer): Promise<Datab
 
   if (binaryBuffer) {
     dbInstance = new SQL.Database(new Uint8Array(binaryBuffer));
+    // 💡 Ensure indexes exist on imported databases seamlessly without altering your data rows
+    createDatabaseTables(dbInstance);
   } else {
     dbInstance = new SQL.Database();
     createDatabaseTables(dbInstance);
