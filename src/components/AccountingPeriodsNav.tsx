@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { PRESSABLE_CLASS, PRESSABLE_SOFT_CLASS } from '../util/pressable';
 
 interface AccountingPeriodsNavProps {
@@ -21,6 +22,21 @@ export function AccountingPeriodsNav({
   onCopyPrevious,
   onDeleteMonth,
 }: AccountingPeriodsNavProps) {
+
+  //  REF TO TRACK THE ACTIVE MONTH ELEMENT
+  const activeMonthRef = useRef<HTMLDivElement | null>(null);
+
+  // TRIGGER AUTOMATIC SCROLLING WHEN THE SELECTED MONTH CHANGES
+  useEffect(() => {
+    if (activeMonthRef.current) {
+      activeMonthRef.current.scrollIntoView({
+        behavior: 'smooth',   // Smooth gliding animation
+        block: 'nearest',     // Prevents the main page from jumping vertically
+        inline: 'center',     // Centers the active item perfectly in the scroll window
+      });
+    }
+  }, [selectedMonthYear]); // Runs whenever selectedMonthYear updates
+
   return (
     <div className="space-y-2 md:col-span-1 min-w-0 w-full">
       <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 px-2 mb-3">Accounting Periods</p>
@@ -66,7 +82,9 @@ export function AccountingPeriodsNav({
             const displayLabel = dateObj.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
 
             return (
-              <div key={monthStr} className="flex items-center gap-2 shrink-0 select-none">
+              <div key={monthStr} 
+              ref={isActive ? activeMonthRef : null}
+              className="flex items-center gap-2 shrink-0 select-none">
                 <button
                   onClick={() => {
                     onSelectMonth(monthStr);
