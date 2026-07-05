@@ -1,11 +1,5 @@
 import { type IncomeSource, type Expense, type DebtLiability } from '../db';
 
-export interface MonthShardPayload {
-  income: IncomeSource[];
-  expenses: Expense[];
-  debts: DebtLiability[];
-}
-
 export const getNowString = (): string => new Date().toISOString().slice(0, 7);
 
 export const toMonthDate = (monthYear: string): Date | null => {
@@ -52,21 +46,29 @@ export const recalculateAvailableMonths = (
   return Array.from(months).sort((a, b) => b.localeCompare(a));
 };
 
+/* ==========================================================================
+   TRUST BANK BILLING CYCLE CALCULATION ENGINE
+   ========================================================================== */
+
 /**
- * 💡 ADDED FOR SHARDING: Filters global array lists down to a targeted monthly snapshot payload
+ * Calculates the variable Trust Bank billing cycle based on the month.
+ * The statement always closes 4 days prior to the last calendar day of the month.
+ * @param selectedMonthYear The target ledger month (e.g., "2026-05")
  */
-export const extractShardPayload = (
-  income: IncomeSource[],
-  expenses: Expense[],
-  debts: DebtLiability[],
-  targetMonthYear: string
-): MonthShardPayload => {
+export function calculateTrustBillingCycle(selectedMonthYear: string) {
+  const [year, month] = selectedMonthYear.split('-').map(Number);
+  
+  // 1. Establish Cycle End: 4 days before the last day of the current month
+  // (Passing 0 as the day returns the last day of the previous month context, so 'month' gives the last day of this month)
+  const cycleEnd = new Date(year, month, 0); 
+  cycleEnd.setDate(cycleEnd.getDate() - 4);
+
+  // 2. Establish Cycle Start: 4 days before the last day of the PREVIOUS month + 1 day
+  const cycleStart = new Date(year, month - 1, 0);
+  cycleStart.setDate(cycleStart.getDate() - 4 + 1);
+
   return {
-    income: income.filter((i) => i.monthYear === targetMonthYear),
-    expenses: expenses.filter((e) => e.category === 'Food' 
-      ? e.monthYear === targetMonthYear 
-      : e.monthYear === targetMonthYear
-    ),
-    debts: debts.filter((d) => d.monthYear === targetMonthYear),
+    cycleStart,
+    cycleEnd
   };
-};
+}

@@ -9,6 +9,7 @@ import { SyncToast } from './components/SyncToast';
 import { PurgeModal } from './components/PurgeModal';
 import { UndoSnackbar } from './components/UndoSnackbar';
 import { PRESSABLE_SOFT_CLASS } from './util/pressable';
+import { calculateTrustBillingCycle } from './store/helpers'; 
 
 // Expose to console for debugging
 if (typeof window !== 'undefined') {
@@ -56,12 +57,18 @@ function App() {
     void initializeAndPull();
   }, [fetchInitialData, gdriveToken, pullFromCloud]);
 
-  // Root-level Metric Computations
+  /* ==========================================================================
+     💡 1. CORE CASH FLOW MATH (PREVENTS DOUBLE COUNTING)
+     ========================================================================== */
   const currentMonthIncome = income.filter(i => i.monthYear === selectedMonthYear);
   const netTakeHome = currentMonthIncome.reduce((sum, i) => sum + i.netTakeHome, 0);
 
-  const totalExpenses = expenses
-    .filter(e => e.monthYear === selectedMonthYear)
+  const currentMonthExpenses = expenses.filter(e => e.monthYear === selectedMonthYear);
+
+  // EXCLUDES all itemized Trust expenses from the cash total. 
+  // Cash outflow is only hit when you log the manual "Credit -> Trust" bill payment.
+  const totalExpenses = currentMonthExpenses
+    .filter(e => !e.description.includes('(Trust)'))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
   const totalDebtInstallments = debts
@@ -70,6 +77,42 @@ function App() {
 
   const totalSpent = totalExpenses + totalDebtInstallments;
   const remainingSurplus = netTakeHome - totalSpent;
+
+  /* ==========================================================================
+     💡 2. STRICT TRUST CYCLE TRACKING (BLUE BOX)
+     ========================================================================== */
+  const trustCycle = calculateTrustBillingCycle(selectedMonthYear);
+
+  const formatDateLabel = (date: Date) => 
+    date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const cycleStartLabel = formatDateLabel(trustCycle.cycleStart);
+  const cycleEndLabel = formatDateLabel(trustCycle.cycleEnd);
+
+  // 💡 SEARCHES GLOBAL 'expenses' ARRAY: Isolates ONLY the food items that fall squarely 
+  // inside the active cycle dates, regardless of which month folder they were saved in.
+  const foodTrustCardSpent = expenses
+    .filter(e => {
+      if (e.category !== 'Food' || !e.description.includes('(Trust)')) return false;
+
+      const dayMatch = e.description.match(/^(\d+)-/);
+      if (!dayMatch) return false;
+      
+      const transactionDay = parseInt(dayMatch[1], 10);
+      
+      // Construct date using the item's OWN logged monthYear to bridge boundaries seamlessly
+      const [year, month] = e.monthYear.split('-').map(Number);
+      const exactTxDate = new Date(year, month - 1, transactionDay);
+      
+      exactTxDate.setHours(0, 0, 0, 0);
+      trustCycle.cycleStart.setHours(0, 0, 0, 0);
+      trustCycle.cycleEnd.setHours(0, 0, 0, 0);
+
+      return exactTxDate >= trustCycle.cycleStart && exactTxDate <= trustCycle.cycleEnd;
+    })
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+  const totalTrustObligationBalance = foodTrustCardSpent;
 
   if (isLoading) {
     return (
@@ -135,6 +178,25 @@ function App() {
               totalSpent={totalSpent}
               remainingSurplus={remainingSurplus}
             />
+
+            {/* 💡 Trust Card Balance Sub-Ledger Panel with Cycle Date Parameters */}
+            {totalTrustObligationBalance > 0 && (
+              <div className="rounded-xl border border-blue-500/10 bg-blue-500/5 px-4 py-2.5 flex flex-col sm:flex-row gap-1 sm:gap-0 justify-between sm:items-center text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                    <span className="text-zinc-300 font-medium">Trust Card Cycle Obligations:</span>
+                  </div>
+                  <span className="text-[11px] text-zinc-500 font-normal sm:border-l sm:border-zinc-800 sm:pl-3">
+                    Cycle: {cycleStartLabel} – {cycleEndLabel}
+                  </span>
+                </div>
+                <span className="font-mono font-bold text-blue-400 text-right text-sm sm:text-xs tracking-tight">
+                  ${totalTrustObligationBalance.toFixed(2)}
+                </span>
+              </div>
+            )}
+
             <DataEntryForms />
           </div>
         </div>

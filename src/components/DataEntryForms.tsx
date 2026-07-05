@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useWealthStore } from '../store/useWealthStore';
 import { PRESSABLE_CLASS } from '../util/pressable';
 
-// Core category option selection blocks
 type LogCategory = 'Earn' | 'Food' | 'Util' | 'Credit' | 'Custom';
+type PaymentMethod = 'Debit' | 'Trust';
 
 export function DataEntryForms() {
   const selectedMonthYear = useWealthStore((state) => state.selectedMonthYear);
@@ -16,7 +16,8 @@ export function DataEntryForms() {
   // Dynamic Option Fields
   const [subOption, setSubOption] = useState('');
   const [customKey, setCustomKey] = useState('');
-  const [foodDay, setFoodDay] = useState(''); // Text box to track structural day input
+  const [foodDay, setFoodDay] = useState(''); 
+  const [foodPaymentMethod, setFoodPaymentMethod] = useState<PaymentMethod>('Debit'); // 💡 Added for tracking food account variants
 
   const handleCashSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,8 +45,8 @@ export function DataEntryForms() {
         return isCurrentPeriod && isFoodType && startsWithDayPattern;
       }).length;
 
-      // Suffix generator formatting (e.g., "3-1", "3-2")
-      finalizedKey = `${dayInt}-${matchingFoodCount + 1}`;
+      // 💡 Suffix format includes account source tags safely inside description metrics
+      finalizedKey = `${dayInt}-${matchingFoodCount + 1} (${foodPaymentMethod})`;
     }
 
     if (!finalizedKey) return;
@@ -150,19 +151,32 @@ export function DataEntryForms() {
           </div>
         )}
 
-        {/* FOOD Auto-Incrementation Day Textbox Entry input block */}
+        {/* 💡 FOOD SELECTION LAYOUT: Prompts for both Day and Payment Method */}
         {activeCategory === 'Food' && (
-          <div className="space-y-1">
-            <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Day of Month</label>
-            <input
-              type="text"
-              pattern="[0-9]*"
-              inputMode="numeric"
-              value={foodDay}
-              onChange={(e) => setFoodDay(e.target.value.replace(/\D/g, ''))}
-              placeholder={`e.g. 3 (Auto generates ${foodDay ? foodDay : '3'}-1, ${foodDay ? foodDay : '3'}-2)`}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Day of Month</label>
+              <input
+                type="text"
+                pattern="[0-9]*"
+                inputMode="numeric"
+                value={foodDay}
+                onChange={(e) => setFoodDay(e.target.value.replace(/\D/g, ''))}
+                placeholder={`e.g. ${new Date().getDate()}`}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Payment Via</label>
+              <select
+                value={foodPaymentMethod}
+                onChange={(e) => setFoodPaymentMethod(e.target.value as PaymentMethod)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
+              >
+                <option value="Debit">Debit Card</option>
+                <option value="Trust">Trust Card</option>
+              </select>
+            </div>
           </div>
         )}
 
