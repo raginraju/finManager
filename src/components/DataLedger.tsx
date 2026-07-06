@@ -13,17 +13,41 @@ export function DataLedger() {
     upsertDebt
   } = useWealthStore();
   
-  const [isFoodExpanded, setIsFoodExpanded] = useState(false);
+  // Master toggle set to true by default
+  const [isFoodExpanded, setIsFoodExpanded] = useState(true);
 
-  // Track which specific item is currently being edited
+  // 1. TIER 1: 10-Day Buckets State
+  const getRangeLabel = (day: number) => {
+    if (day <= 10) return 'Day 1 – 10';
+    if (day <= 20) return 'Day 11 – 20';
+    return 'Day 21+';
+  };
+
+  const [expandedRanges, setExpandedRanges] = useState<Record<string, boolean>>(() => {
+    const todayNumber = new Date().getDate(); 
+    return { [getRangeLabel(todayNumber)]: true }; // Auto-expands today's 10-day bucket
+  });
+
+  const toggleRangeCollapse = (rangeLabel: string) => {
+    setExpandedRanges(prev => ({ ...prev, [rangeLabel]: !prev[rangeLabel] }));
+  };
+
+  // 2. TIER 2: Individual Days State
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>(() => {
+    const todayNumber = new Date().getDate();
+    return { [todayNumber.toString()]: true }; // Auto-expands today's exact day folder
+  });
+
+  const toggleDayCollapse = (dayStr: string) => {
+    setExpandedDays(prev => ({ ...prev, [dayStr]: !prev[dayStr] }));
+  };
+
+  // Track editing state
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingTable, setEditingTable] = useState<'income' | 'expenses' | 'debts' | null>(null);
-  
-  // Buffers to hold changing text inputs
   const [editName, setEditName] = useState('');
   const [editAmount, setEditAmount] = useState('');
 
-  // Filter items strictly tied to the active timeframe
   const currentIncome = income.filter((i) => i.monthYear === selectedMonthYear);
   const currentExpenses = expenses.filter((e) => e.monthYear === selectedMonthYear);
   const currentDebts = debts.filter((d) => d.monthYear === selectedMonthYear);
@@ -32,7 +56,25 @@ export function DataLedger() {
   const nonFoodExpenses = currentExpenses.filter((e) => e.category !== 'Food');
   const totalFoodSum = foodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-  // Initialize row parameters into state for editing
+  // Group into 10-day buckets
+  const groupedFoodByRange = foodExpenses.reduce((acc, item) => {
+    const dayMatch = item.description.match(/^(\d+)-/);
+    let rangeLabel = 'Unsorted';
+    
+    if (dayMatch) {
+      const dayNumber = parseInt(dayMatch[1], 10);
+      rangeLabel = getRangeLabel(dayNumber);
+    }
+    
+    if (!acc[rangeLabel]) {
+      acc[rangeLabel] = [];
+    }
+    acc[rangeLabel].push(item);
+    return acc;
+  }, {} as Record<string, typeof foodExpenses>);
+
+  const orderedBuckets = ['Day 1 – 10', 'Day 11 – 20', 'Day 21+', 'Unsorted'];
+
   const startEditing = (table: 'income' | 'expenses' | 'debts', id: number, initialName: string, initialAmount: number) => {
     setEditingId(id);
     setEditingTable(table);
@@ -47,7 +89,6 @@ export function DataLedger() {
     setEditAmount('');
   };
 
-  // 💡 FIXED: Uses Zustand store actions to handle relational SQLite execution workflows smoothly
   const handleSaveEdit = async () => {
     if (!editingId || !editingTable || !editName || !editAmount) return;
     const parsedAmount = parseFloat(editAmount);
@@ -61,7 +102,7 @@ export function DataLedger() {
       } else if (editingTable === 'expenses') {
         const item = expenses.find(e => e.id === editingId);
         if (!item) return;
-        await deleteExpense(editingId); // Re-insert modified row via store context
+        await deleteExpense(editingId);
         await useWealthStore.getState().addExpense({
           monthYear: selectedMonthYear,
           description: editName,
@@ -219,7 +260,7 @@ export function DataLedger() {
           );
         })}
 
-        {/* ================= FOOD ACCORDION ITEMS ================= */}
+        {/* ================= FOOD ACCORDION ITEMS (NESTED COLLAPSE) ================= */}
         {foodExpenses.length > 0 && (
           <>
             <div 
@@ -229,7 +270,6 @@ export function DataLedger() {
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <span className="text-[10px] font-mono text-zinc-500 w-3 shrink-0">{isFoodExpanded ? '▼' : '▶'}</span>
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">FOOD</span>
-                
                 
                 <div className="flex flex-col min-w-0 leading-tight">
                   <span className="text-zinc-100 font-semibold truncate text-xs sm:text-sm">
@@ -251,58 +291,140 @@ export function DataLedger() {
             </div>
 
             {isFoodExpanded && (
-              <div className="bg-zinc-950/60 divide-y divide-zinc-900 border-b border-zinc-800">
-                {foodExpenses.map((item) => {
-                  const isEditing = editingId === item.id && editingTable === 'expenses';
-                  return (
-                    <div key={`food-sub-${item.id}`} className="flex items-center justify-between p-2.5 pl-9 pr-3 hover:bg-zinc-900/20 transition-colors min-h-[44px]">
-                      <div className="flex items-center gap-2 flex-1 mr-4">
-                        <span className="text-zinc-500 font-mono shrink-0">└─</span>
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="bg-zinc-950 border border-zinc-800 text-zinc-400 font-mono rounded px-2 py-0.5 text-xs w-full focus:outline-none focus:border-zinc-700"
-                          />
-                        ) : (
-                          <span className="text-zinc-400 font-mono">Item: {item.description}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        {isEditing ? (
-                          <input
-                            type="number"
-                            value={editAmount}
-                            onChange={(e) => setEditAmount(e.target.value)}
-                            className="bg-zinc-950 border border-zinc-800 text-zinc-400 font-mono rounded px-2 py-0.5 text-xs w-24 text-right focus:outline-none focus:border-zinc-700"
-                          />
-                        ) : (
-                          <span className="text-zinc-400 font-mono">-${item.amount.toFixed(2)}</span>
-                        )}
+              <div className="bg-zinc-950/60 flex flex-col py-2 border-b border-zinc-800">
+                {orderedBuckets.map(rangeLabel => {
+                  const bucketItems = groupedFoodByRange[rangeLabel];
+                  if (!bucketItems || bucketItems.length === 0) return null;
 
-                        {isEditing ? (
-                          <div className="flex gap-1.5 ml-2">
-                            <button onClick={handleSaveEdit} className="text-emerald-400 hover:text-emerald-300 font-medium px-1">Save</button>
-                            <button onClick={cancelEditing} className="text-zinc-500 hover:text-zinc-400 px-1">Cancel</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 ml-2">
-                            <button 
-                              onClick={() => startEditing('expenses', item.id!, item.description, item.amount)}
-                              className="text-zinc-500 hover:text-zinc-300 font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button 
-                              onClick={() => item.id && handleGlobalDelete('expenses', item.id)}
-                              className={`text-zinc-600 hover:text-red-400 p-1 cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                  const rangeTotal = bucketItems.reduce((sum, i) => sum + i.amount, 0);
+                  const isRangeExpanded = expandedRanges[rangeLabel];
+
+                  // TIER 2: Group the bucket's items by their specific day
+                  const itemsByDay = bucketItems.reduce((acc, item) => {
+                    const dayMatch = item.description.match(/^(\d+)-/);
+                    const dayStr = dayMatch ? dayMatch[1] : 'Unknown';
+                    if (!acc[dayStr]) acc[dayStr] = [];
+                    acc[dayStr].push(item);
+                    return acc;
+                  }, {} as Record<string, typeof bucketItems>);
+
+                  // Sort days numerically so e.g. Day 2 comes before Day 10
+                  const sortedDays = Object.keys(itemsByDay).sort((a, b) => parseInt(a) - parseInt(b));
+
+                  return (
+                    <div key={rangeLabel} className="flex flex-col mb-1 last:mb-0">
+                      
+                      {/* Bucket Header (e.g., Day 1 - 10) */}
+                      <button
+                        onClick={() => toggleRangeCollapse(rangeLabel)}
+                        className="flex items-center justify-between py-2 px-4 hover:bg-zinc-900/30 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-zinc-600 font-mono w-3 shrink-0">
+                            {isRangeExpanded ? '▼' : '▶'}
+                          </span>
+                          <span className="text-zinc-300 font-medium text-xs tracking-wide uppercase">
+                            {rangeLabel} <span className="text-zinc-600 font-normal ml-1">({bucketItems.length})</span>
+                          </span>
+                        </div>
+                        <span className="text-amber-500/70 font-mono text-xs font-medium">
+                          -${rangeTotal.toFixed(2)}
+                        </span>
+                      </button>
+
+                      {/* Bucket Contents (The specific days) */}
+                      {isRangeExpanded && (
+                        <div className="flex flex-col pb-1">
+                          {sortedDays.map(dayStr => {
+                            const dayItems = itemsByDay[dayStr];
+                            const dayTotal = dayItems.reduce((sum, i) => sum + i.amount, 0);
+                            const isDayExpanded = expandedDays[dayStr];
+                            const isToday = dayStr === new Date().getDate().toString();
+
+                            return (
+                              <div key={`day-${dayStr}`} className="flex flex-col">
+                                {/* Specific Day Header (e.g., Day 4) */}
+                                <button
+                                  onClick={() => toggleDayCollapse(dayStr)}
+                                  className={`flex items-center justify-between py-1.5 px-2 pl-9 hover:bg-zinc-900/40 transition-colors text-left border-l-2 ${isToday ? 'border-emerald-500/50 bg-zinc-900/20' : 'border-transparent'}`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-zinc-500 font-mono w-3 shrink-0">
+                                      {isDayExpanded ? '▼' : '▶'}
+                                    </span>
+                                    <span className={`font-medium text-[11px] ${isToday ? 'text-emerald-400/80' : 'text-zinc-400'}`}>
+                                      Day {dayStr} <span className="text-zinc-600 font-normal ml-1">({dayItems.length})</span>
+                                    </span>
+                                  </div>
+                                  <span className="text-zinc-500 font-mono text-[11px]">
+                                    -${dayTotal.toFixed(2)}
+                                  </span>
+                                </button>
+
+                                {/* Day Contents (The actual item logs) */}
+                                {isDayExpanded && (
+                                  <div className="flex flex-col bg-zinc-900/10 pb-1">
+                                    {dayItems.map((item) => {
+                                      const isEditing = editingId === item.id && editingTable === 'expenses';
+                                      return (
+                                        <div key={`food-item-${item.id}`} className="flex items-center justify-between py-1.5 pl-14 pr-4 hover:bg-zinc-900/30 transition-colors min-h-[36px]">
+                                          <div className="flex items-center gap-2 flex-1 mr-4">
+                                            <span className="text-zinc-600 font-mono shrink-0">└</span>
+                                            {isEditing ? (
+                                              <input
+                                                type="text"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                className="bg-zinc-950 border border-zinc-800 text-zinc-300 font-mono rounded px-2 py-0.5 text-[11px] w-full focus:outline-none focus:border-zinc-600"
+                                              />
+                                            ) : (
+                                              <span className="text-zinc-400 font-mono text-[11px]">{item.description}</span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-3 shrink-0">
+                                            {isEditing ? (
+                                              <input
+                                                type="number"
+                                                value={editAmount}
+                                                onChange={(e) => setEditAmount(e.target.value)}
+                                                className="bg-zinc-950 border border-zinc-800 text-zinc-300 font-mono rounded px-2 py-0.5 text-[11px] w-16 text-right focus:outline-none focus:border-zinc-600"
+                                              />
+                                            ) : (
+                                              <span className="text-zinc-400 font-mono text-[11px]">-${item.amount.toFixed(2)}</span>
+                                            )}
+
+                                            {isEditing ? (
+                                              <div className="flex gap-1.5 ml-2">
+                                                <button onClick={handleSaveEdit} className="text-emerald-400 hover:text-emerald-300 font-medium text-[10px] px-1">Save</button>
+                                                <button onClick={cancelEditing} className="text-zinc-500 hover:text-zinc-400 text-[10px] px-1">Cancel</button>
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center gap-2 ml-1">
+                                                <button 
+                                                  onClick={() => startEditing('expenses', item.id!, item.description, item.amount)}
+                                                  className="text-zinc-500 hover:text-zinc-300 font-medium text-[10px]"
+                                                >
+                                                  Edit
+                                                </button>
+                                                <button 
+                                                  onClick={() => item.id && handleGlobalDelete('expenses', item.id)}
+                                                  className={`text-zinc-600 hover:text-red-400 p-1 cursor-pointer text-[10px] ${PRESSABLE_SOFT_CLASS}`}
+                                                >
+                                                  ✕
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
