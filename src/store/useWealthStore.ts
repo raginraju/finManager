@@ -240,6 +240,12 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     // 1. Capture the currently active screen month BEFORE we switch views
     const sourceTemplateMonth = get().selectedMonthYear;
 
+    // 💡 THE UNIVERSAL SAFETY GUARD: Prevents self-copying OR redundant adding
+    if (sourceTemplateMonth === monthYear) {
+      alert(`Cannot ${isCopy ? 'copy data to' : 'add'} the same month you are currently viewing. Aborting operation.`);
+      return; 
+    }
+
     // 2. Advance the UI viewport focus state to the new month path target
     set({ selectedMonthYear: monthYear });
 
@@ -247,15 +253,20 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       try {
         const db = await getSQLiteEngine();
 
-        // 3. Clone ALL active Income lines from our active view source state
-        db.run(
+        // 💡 THE OVERWRITE GUARD: Clean the target month first
+        await db.run(`DELETE FROM income WHERE monthYear = ?`, [monthYear]);
+        await db.run(`DELETE FROM expenses WHERE monthYear = ?`, [monthYear]);
+        await db.run(`DELETE FROM debts WHERE monthYear = ?`, [monthYear]);
+
+        // 3. Clone ALL active Income lines (AUTOINCREMENT handles the ID)
+        await db.run(
           `INSERT INTO income (monthYear, name, grossAmount, netTakeHome, updatedAt)
            SELECT ?, name, grossAmount, netTakeHome, ? FROM income WHERE monthYear = ?`,
           [monthYear, new Date().toISOString(), sourceTemplateMonth]
         );
 
-        // 4. 💡 FIXED: Clones ALL expenses EXCEPT food items (ignoring case flags)
-        db.run(
+        // 4. Clone ALL expenses EXCEPT food items (AUTOINCREMENT handles the ID)
+        await db.run(
           `INSERT INTO expenses (monthYear, description, amount, date, category, isFixed)
            SELECT ?, description, amount, ? || SUBSTR(date, 8), category, isFixed 
            FROM expenses 
@@ -263,8 +274,8 @@ export const useWealthStore = create<WealthState>((set, get) => ({
           [monthYear, monthYear, sourceTemplateMonth]
         );
 
-        // 5. Clone debt installment pipelines, decrementing balances cleanly
-        db.run(
+        // 5. Clone debt pipelines (AUTOINCREMENT handles the ID)
+        await db.run(
           `INSERT INTO debts (monthYear, name, totalBalance, monthlyPayment, isFixedInstallment)
            SELECT ?, name, CASE WHEN totalBalance > monthlyPayment THEN totalBalance - monthlyPayment ELSE 0 END, monthlyPayment, isFixedInstallment 
            FROM debts WHERE monthYear = ?`,
@@ -273,6 +284,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
       } catch (err) {
         console.error("Failed to accurately duplicate selected month context configuration:", err);
+        alert("A database error occurred while copying the data.");
       }
     }
 
