@@ -16,7 +16,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   lastDeletedSnapshot: null,
   db: null,
   isHydratedFromCloud: false,
-  isLoading: true, // Remains true initially to catch first load sequence execution
+  isLoading: true, 
   gdriveToken: null,
   selectedMonthYear: utils.getNowString(),
   availableMonths: [utils.getNowString()],
@@ -35,32 +35,27 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     try {
       const token = get().gdriveToken;
 
-      // 1. If there's no token yet on initial load/reload, exit early.
-      // Do not lock isAppBooted. Let the App.tsx useEffect try again when the token arrives.
       if (!token && !isAppBooted) {
         isFetchingInitialData = false;
         set({ isLoading: false });
         return; 
       }
 
-      // 2. REUSE YOUR PULL METHOD: If we have a token and haven't booted yet,
-      // trigger your core pullFromCloud mechanism to download and ingest wealth.db
       if (token && !isAppBooted) {
         await get().pullFromCloud(); 
         set({ isHydratedFromCloud: true });
       }
 
-      // 3. Mark the app as successfully booted
       isAppBooted = true;
 
-      // 4. Fetch the newly populated database engine reference from the store
       const db = get().db || await getSQLiteEngine();
       const activeMonth = get().selectedMonthYear || utils.getNowString();
       
-      // 5. Query data from the freshly pulled cloud data rows
       const incomeRows = db.exec(`SELECT * FROM income WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
       const expenseRows = db.exec(`SELECT * FROM expenses WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
-      const debtRows = db.exec(`SELECT * FROM debts WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
+      
+      // 💡 FIXED 1: Removed WHERE monthYear filter. Debts load globally across all months.
+      const debtRows = db.exec(`SELECT * FROM debts`)[0]?.values || [];
       
       const distinctMonths = db.exec(`SELECT DISTINCT monthYear FROM expenses UNION SELECT DISTINCT monthYear FROM income`)[0]?.values || [];
       const monthsList = distinctMonths
@@ -112,30 +107,23 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
   setSelectedMonthYear: async (monthYear) => {
     set({ selectedMonthYear: monthYear });
-    // 💡 Quietly swap current view state datasets without activating the full-screen loader overlay
     await get().fetchInitialData();
   },
 
-  // Mannual pull from cloud sequence to ensure the latest data is reflected in the local SQLite memory
   pullFromCloud: async () => {
     const token = get().gdriveToken;
     if (!token) return;
 
     set({ syncStatus: 'syncing', isHydrating: true });
     try {
-      // 1. Force find the cloud file ID to ensure we point to the absolute latest version
       const cloudFileId = await findDataFile(token, 'wealth.db');
       
       if (cloudFileId) {
-        // 2. Clear old state instances by streaming the fresh array buffer down
         const buffer = await downloadBinaryFile(token, cloudFileId);
-        
-        // 3. Force re-instantiation of the SQLite memory structure using the fresh binary
         await getSQLiteEngine(buffer);
         
-        // 4. Force query execution for the active month window to snap elements into view
-        isAppBooted = true; // Ensure state remains booted
-        isFetchingInitialData = false; // Release lock flags
+        isAppBooted = true; 
+        isFetchingInitialData = false; 
         
         set({ isHydrating: false });
         await get().fetchInitialData();
@@ -157,19 +145,15 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     const token = get().gdriveToken;
     const isHydrated = get().isHydratedFromCloud;
 
-    // ❌ CRITICAL GUARD: If the token is missing OR the app hasn't completed 
-    // downloading your data from the cloud yet, STOP immediately. Do not overwrite!
     if (!token || !isHydrated && !isForce) {
       console.warn("Cloud upload blocked: App has not successfully downloaded your data yet.");
       return;
     }
 
-    // Changes state for background status markers without interrupting client focus workflows
     set({ syncStatus: 'syncing' });
     try {
-      // Get the live active database instance instead of re-fetching a clean engine reference
       const db = get().db || await getSQLiteEngine();
-      const binaryArray = db.export(); // Package database to binary
+      const binaryArray = db.export(); 
       
       const fileId = await findDataFile(token, 'wealth.db');
       await uploadBinaryFile(token, 'wealth.db', binaryArray, fileId);
@@ -182,9 +166,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     }
   },
 
-  // ========================================================
-  // 💡 OPTIMIZED MUTATIONS: Instant UI updates + Background Sync
-  // ========================================================
   addExpense: async (expense) => {
     const db = await getSQLiteEngine();
     db.run(
@@ -192,10 +173,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       [expense.monthYear, expense.description, expense.amount, expense.date, expense.category, expense.isFixed ? 1 : 0]
     );
     
-    // 1. Instant local state updates via a non-blocking re-query pass
     await get().fetchInitialData(); 
-    
-    // 2. Quiet background file mirroring stream to your Google Drive account sandbox
     void get().syncWithCloud();
   },
 
@@ -203,10 +181,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     const db = await getSQLiteEngine();
     db.run(`DELETE FROM expenses WHERE id = ?`, [id]);
     
-    // 1. Instant local refresh
     await get().fetchInitialData();
-    
-    // 2. Background sync
     void get().syncWithCloud();
   },
 
@@ -218,54 +193,51 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       db.run(`INSERT INTO income (monthYear, name, grossAmount, netTakeHome, updatedAt) VALUES (?, ?, ?, ?, ?)`, [payload.monthYear, payload.name, payload.grossAmount, payload.netTakeHome, new Date().toISOString()]);
     }
     
-    // 1. Instant local refresh
     await get().fetchInitialData();
-    
-    // 2. Background sync
     void get().syncWithCloud();
   },
 
   upsertDebt: async (payload) => {
     const db = await getSQLiteEngine();
     if (payload.id) {
-      db.run(`UPDATE debts SET name = ?, monthlyPayment = ? WHERE id = ?`, [payload.name, payload.monthlyPayment, payload.id]);
+      db.run(
+        `UPDATE debts SET name = ?, totalBalance = ?, monthlyPayment = ? WHERE id = ?`, 
+        [payload.name, payload.totalBalance, payload.monthlyPayment, payload.id]
+      );
     } else {
-      db.run(`INSERT INTO debts (monthYear, name, totalBalance, monthlyPayment, isFixedInstallment) VALUES (?, ?, ?, ?, ?)`, [payload.monthYear, payload.name, payload.totalBalance ?? 0, payload.monthlyPayment, payload.isFixedInstallment ? 1 : 0]);
+      db.run(
+        `INSERT INTO debts (monthYear, name, totalBalance, monthlyPayment, isFixedInstallment) VALUES (?, ?, ?, ?, ?)`, 
+        [payload.monthYear, payload.name, payload.totalBalance ?? 0, payload.monthlyPayment, payload.isFixedInstallment ? 1 : 0]
+      );
     }
     await get().fetchInitialData();
     void get().syncWithCloud();
   },
 
   addMonthYear: async (monthYear, isCopy = false) => {
-    // 1. Capture the currently active screen month BEFORE we switch views
     const sourceTemplateMonth = get().selectedMonthYear;
 
-    // 💡 THE UNIVERSAL SAFETY GUARD: Prevents self-copying OR redundant adding
     if (sourceTemplateMonth === monthYear) {
       alert(`Cannot ${isCopy ? 'copy data to' : 'add'} the same month you are currently viewing. Aborting operation.`);
       return; 
     }
 
-    // 2. Advance the UI viewport focus state to the new month path target
     set({ selectedMonthYear: monthYear });
 
     if (isCopy && sourceTemplateMonth) {
       try {
         const db = await getSQLiteEngine();
 
-        // 💡 THE OVERWRITE GUARD: Clean the target month first
+        // 💡 FIXED 2: Only clear income and expenses. Leave global debts alone.
         await db.run(`DELETE FROM income WHERE monthYear = ?`, [monthYear]);
         await db.run(`DELETE FROM expenses WHERE monthYear = ?`, [monthYear]);
-        await db.run(`DELETE FROM debts WHERE monthYear = ?`, [monthYear]);
 
-        // 3. Clone ALL active Income lines (AUTOINCREMENT handles the ID)
         await db.run(
           `INSERT INTO income (monthYear, name, grossAmount, netTakeHome, updatedAt)
            SELECT ?, name, grossAmount, netTakeHome, ? FROM income WHERE monthYear = ?`,
           [monthYear, new Date().toISOString(), sourceTemplateMonth]
         );
 
-        // 4. Clone ALL expenses EXCEPT food items (AUTOINCREMENT handles the ID)
         await db.run(
           `INSERT INTO expenses (monthYear, description, amount, date, category, isFixed)
            SELECT ?, description, amount, ? || SUBSTR(date, 8), category, isFixed 
@@ -274,13 +246,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
           [monthYear, monthYear, sourceTemplateMonth]
         );
 
-        // 5. Clone debt pipelines (AUTOINCREMENT handles the ID)
-        await db.run(
-          `INSERT INTO debts (monthYear, name, totalBalance, monthlyPayment, isFixedInstallment)
-           SELECT ?, name, CASE WHEN totalBalance > monthlyPayment THEN totalBalance - monthlyPayment ELSE 0 END, monthlyPayment, isFixedInstallment 
-           FROM debts WHERE monthYear = ?`,
-          [monthYear, sourceTemplateMonth]
-        );
+        // 💡 DELETED: The debt cloning logic was removed from here.
 
       } catch (err) {
         console.error("Failed to accurately duplicate selected month context configuration:", err);
@@ -288,7 +254,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       }
     }
 
-    // Refresh UI tracking engines and mirror data state instantly to Google Drive
     await get().fetchInitialData();
     void get().syncWithCloud();
   },
@@ -296,32 +261,27 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   deleteMonthYear: async (monthYear) => {
     const db = await getSQLiteEngine();
     
-    // 1. Clear out all data lines assigned to this month tag
+    // 💡 FIXED 3: Clear out expenses and income, but do NOT delete debts.
     db.run(`DELETE FROM expenses WHERE monthYear = ?`, [monthYear]);
     db.run(`DELETE FROM income WHERE monthYear = ?`, [monthYear]);
-    db.run(`DELETE FROM debts WHERE monthYear = ?`, [monthYear]);
 
-    // 2. Adjust active viewport context fallback selection if you delete the month you are looking at
     if (get().selectedMonthYear === monthYear) {
       set({ selectedMonthYear: utils.getNowString() });
     }
 
-    // 3. Update active layout metrics
     await get().fetchInitialData();
-
-    // 4. Force synchronization right away to drop data on Drive immediately
     await get().syncWithCloud(true);
   },
+  
   undoDeleteMonthYear: async () => {},
+  
   clearAllData: async () => {
     const db = await getSQLiteEngine();
     
-    // 1. Wipe out every row across your accounting ledger tables entirely
     db.run(`DELETE FROM expenses`);
     db.run(`DELETE FROM income`);
     db.run(`DELETE FROM debts`);
 
-    // 2. Clear out state states
     set({
       income: [],
       expenses: [],
@@ -330,8 +290,8 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       selectedMonthYear: utils.getNowString()
     });
 
-    // 3. Force push the completely blank database schema update out to Google Drive
     await get().syncWithCloud(true);
   },
+  
   hydrateFromCloud: async () => { await get().fetchInitialData(); }
 }));

@@ -11,6 +11,10 @@ import { UndoSnackbar } from './components/UndoSnackbar';
 import { PRESSABLE_SOFT_CLASS } from './util/pressable';
 import { calculateTrustBillingCycle } from './store/helpers'; 
 
+// 💡 NEW IMPORTS FOR TABS
+import { StudyTracker } from './components/StudyTracker';
+import { DebtManager } from './components/DebtManager';
+
 // Expose to console for debugging
 if (typeof window !== 'undefined') {
   (window as any).debugStore = useWealthStore;
@@ -36,6 +40,9 @@ function App() {
     expenses,
     debts
   } = useWealthStore();
+
+  // 💡 NEW STATE: Tab Routing
+  const [activeTab, setActiveTab] = useState<'ledger' | 'study' | 'debts'>('ledger');
 
   // Modal Control State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -160,49 +167,95 @@ function App() {
           onPullSync={() => { void pullFromCloud(); }} 
         />
 
-        <div className="grid gap-6 md:grid-cols-4 items-start">
-          <AccountingPeriodsNav
-            availableMonths={availableMonths}
-            selectedMonthYear={selectedMonthYear}
-            newMonthYear={newMonthYear}
-            onNewMonthYearChange={setNewMonthYear}
-            onSelectMonth={setSelectedMonthYear}
-            onAddMonth={(monthYear) => addMonthYear(monthYear, false)}
-            onCopyPrevious={(monthYear) => addMonthYear(monthYear, true)}
-            onDeleteMonth={(monthYear) => deleteMonthYear(monthYear)}
-          />
+        {/* ==========================================================================
+            💡 NAVIGATION TABS
+            ========================================================================== */}
+        <div className="flex flex-wrap justify-center gap-3 md:gap-4 mb-4 md:mb-8">
+          <button
+            onClick={() => setActiveTab('ledger')}
+            className={`px-5 py-2 text-xs md:text-sm font-medium rounded-full transition-all ${
+              activeTab === 'ledger' 
+                ? 'bg-zinc-100 text-zinc-900 shadow-md shadow-zinc-100/10' 
+                : 'bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-transparent hover:border-zinc-700/50 hover:bg-zinc-900'
+            }`}
+          >
+            Financial Ledger
+          </button>
+          <button
+            onClick={() => setActiveTab('debts')}
+            className={`px-5 py-2 text-xs md:text-sm font-medium rounded-full transition-all ${
+              activeTab === 'debts' 
+                ? 'bg-purple-500 text-zinc-950 shadow-md shadow-purple-500/20' 
+                : 'bg-zinc-900/80 text-zinc-400 hover:text-purple-300 border border-transparent hover:border-purple-900/50 hover:bg-zinc-900'
+            }`}
+          >
+            Debt Manager
+          </button>
+          <button
+            onClick={() => setActiveTab('study')}
+            className={`px-5 py-2 text-xs md:text-sm font-medium rounded-full transition-all ${
+              activeTab === 'study' 
+                ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20' 
+                : 'bg-zinc-900/80 text-zinc-400 hover:text-emerald-300 border border-transparent hover:border-emerald-900/50 hover:bg-zinc-900'
+            }`}
+          >
+            Study Tracker
+          </button>
+        </div>
 
-          <div className="space-y-6 md:col-span-3">
-            <FinancialSummary
-              netTakeHome={netTakeHome}
-              totalSpent={totalSpent}
-              remainingSurplus={remainingSurplus}
+        {/* ==========================================================================
+            💡 TAB ROUTING
+            ========================================================================== */}
+        {activeTab === 'study' ? (
+          <StudyTracker />
+        ) : activeTab === 'debts' ? (
+          <DebtManager />
+        ) : (
+          <div className="grid gap-6 md:grid-cols-4 items-start">
+            <AccountingPeriodsNav
+              availableMonths={availableMonths}
+              selectedMonthYear={selectedMonthYear}
+              newMonthYear={newMonthYear}
+              onNewMonthYearChange={setNewMonthYear}
+              onSelectMonth={setSelectedMonthYear}
+              onAddMonth={(monthYear) => addMonthYear(monthYear, false)}
+              onCopyPrevious={(monthYear) => addMonthYear(monthYear, true)}
+              onDeleteMonth={(monthYear) => deleteMonthYear(monthYear)}
             />
 
-            {/* 💡 Trust Card Balance Sub-Ledger Panel with Cycle Date Parameters */}
-            {totalTrustObligationBalance > 0 && (
-              <div className="rounded-xl border border-blue-500/10 bg-blue-500/5 px-4 py-2.5 flex flex-col sm:flex-row gap-1 sm:gap-0 justify-between sm:items-center text-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
-                    <span className="text-zinc-300 font-medium">Trust Card Cycle Obligations:</span>
+            <div className="space-y-6 md:col-span-3">
+              <FinancialSummary
+                netTakeHome={netTakeHome}
+                totalSpent={totalSpent}
+                remainingSurplus={remainingSurplus}
+              />
+
+              {/* 💡 Trust Card Balance Sub-Ledger Panel with Cycle Date Parameters */}
+              {totalTrustObligationBalance > 0 && (
+                <div className="rounded-xl border border-blue-500/10 bg-blue-500/5 px-4 py-2.5 flex flex-col sm:flex-row gap-1 sm:gap-0 justify-between sm:items-center text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                      <span className="text-zinc-300 font-medium">Trust Card Cycle Obligations:</span>
+                    </div>
+                    <span className="text-[11px] text-zinc-500 font-normal sm:border-l sm:border-zinc-800 sm:pl-3">
+                      Cycle: {cycleStartLabel} – {cycleEndLabel}
+                    </span>
                   </div>
-                  <span className="text-[11px] text-zinc-500 font-normal sm:border-l sm:border-zinc-800 sm:pl-3">
-                    Cycle: {cycleStartLabel} – {cycleEndLabel}
+                  <span className="font-mono font-bold text-blue-400 text-right text-sm sm:text-xs tracking-tight">
+                    ${totalTrustObligationBalance.toFixed(2)}
                   </span>
                 </div>
-                <span className="font-mono font-bold text-blue-400 text-right text-sm sm:text-xs tracking-tight">
-                  ${totalTrustObligationBalance.toFixed(2)}
-                </span>
-              </div>
-            )}
+              )}
 
-            <DataEntryForms />
+              <DataEntryForms />
+            </div>
           </div>
-        </div>
+        )}
+
       </div>
 
-      <footer className="w-full border-t border-zinc-900 py-6 px-8 text-center bg-zinc-950">
+      <footer className="w-full border-t border-zinc-900 py-6 px-8 text-center bg-zinc-950 mt-auto">
         <button
           onClick={() => setIsModalOpen(true)}
           className={`text-[11px] font-medium text-zinc-600 hover:text-red-400/80 tracking-wide uppercase cursor-pointer ${PRESSABLE_SOFT_CLASS}`}
