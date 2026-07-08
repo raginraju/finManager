@@ -6,6 +6,9 @@ export function StudyTracker() {
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [keepScreenOn, setKeepScreenOn] = useState(false);
   
+  // 💡 SLIDER STATE: Defaults to 120 minutes
+  const [goalMinutes, setGoalMinutes] = useState(120); 
+  
   const [totalSeconds, setTotalSeconds] = useState(() => {
     const saved = localStorage.getItem('study_vine_growth');
     return saved ? parseInt(saved, 10) : 0;
@@ -13,9 +16,9 @@ export function StudyTracker() {
 
   // --- REFS ---
   const lastTickRef = useRef(Date.now());
-  const wakeLockRef = useRef<any>(null); // Uses 'any' to avoid strict TypeScript DOM errors
+  const wakeLockRef = useRef<any>(null);
 
-  // --- TIMER LOGIC (Timestamp Math for Mobile Sleep) ---
+  // --- TIMER LOGIC ---
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     
@@ -41,7 +44,7 @@ export function StudyTracker() {
     return () => clearInterval(interval);
   }, [isActive]);
 
-  // --- WAKE LOCK LOGIC (Keep Screen On) ---
+  // --- WAKE LOCK LOGIC ---
   useEffect(() => {
     const manageWakeLock = async () => {
       if (keepScreenOn && isActive && 'wakeLock' in navigator) {
@@ -61,7 +64,6 @@ export function StudyTracker() {
     };
     manageWakeLock();
 
-    // Auto-release if the component unmounts
     return () => {
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {});
@@ -77,14 +79,28 @@ export function StudyTracker() {
     return `${h}:${m}:${s}`;
   };
 
+  // 💡 NEW: THE ROLLBACK ENGINE
   const handleResetSession = () => {
     setIsActive(false);
+    
+    // Subtract whatever time we tracked in THIS session from the grand total
+    setTotalSeconds((prev) => {
+      const revertedTotal = Math.max(0, prev - sessionSeconds);
+      localStorage.setItem('study_vine_growth', revertedTotal.toString());
+      return revertedTotal;
+    });
+    
     setSessionSeconds(0);
   };
 
-  // --- VINE MATH ---
-  const secondsPerStage = 300; // 5 mins
-  const maxStages = 24; // 2 hours
+  // ==========================================================================
+  // 💡 DYNAMIC VINE MATH
+  // ==========================================================================
+  const maxStages = 24; 
+  const goalSeconds = goalMinutes * 60;
+  
+  // Calculate exactly how many seconds it takes to grow 1 leaf to hit the goal perfectly
+  const secondsPerStage = goalSeconds / maxStages; 
   
   const totalStagesCompleted = Math.floor(totalSeconds / secondsPerStage);
   const currentStageProgress = (totalSeconds % secondsPerStage) / secondsPerStage;
@@ -154,17 +170,37 @@ export function StudyTracker() {
         <div className="flex-1 w-full bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 md:p-8 text-center space-y-6 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-xl font-semibold tracking-tight text-emerald-400">Deep Work Garden</h2>
-            <p className="text-xs text-zinc-400">1 leaf = 5 mins. Max = 2 hours.</p>
+            <p className="text-xs text-zinc-400">Plant finishes growing when you hit your goal.</p>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 pt-2">
             <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Current Session</p>
             <div className="text-5xl md:text-6xl font-mono font-light text-zinc-100 tracking-tight">
               {formatTime(sessionSeconds)}
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-3 pt-2">
+          {/* 💡 NEW: Target Slider UI */}
+          <div className="flex flex-col items-center gap-2 pt-2 pb-4 w-full max-w-[240px] mx-auto">
+            <div className="flex justify-between w-full items-end px-1">
+              <label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Target Time</label>
+              <span className="text-sm font-bold text-emerald-400">
+                {goalMinutes} <span className="text-[10px] text-emerald-500/70 uppercase font-medium">mins</span>
+              </span>
+            </div>
+            <input
+              type="range"
+              min="5"
+              max="300"
+              step="5"
+              value={goalMinutes}
+              onChange={(e) => setGoalMinutes(Number(e.target.value))}
+              disabled={isActive}
+              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-3">
             <button
               onClick={() => setIsActive(!isActive)}
               className={`px-6 py-3 rounded-full text-sm font-semibold transition-all w-full sm:w-auto ${
@@ -204,7 +240,7 @@ export function StudyTracker() {
           </div>
         </div>
 
-        {/* Right: The Vine Canvas (Mobile Constrained) */}
+        {/* Right: The Vine Canvas */}
         <div className="relative w-full max-w-[300px] h-[450px] md:h-[550px] bg-gradient-to-b from-zinc-900/40 to-zinc-950 rounded-2xl border border-zinc-800/50 shadow-inner overflow-hidden flex justify-center items-end shrink-0 mx-auto">
           <svg 
             viewBox="0 0 300 1000" 
