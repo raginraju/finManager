@@ -137,21 +137,30 @@ export function DebtManager() {
                     </button>
                   </div>
 
-                  {/* Middle Row: The Balance Breakdown */}
-                  <div className="grid grid-cols-3 gap-4 mb-4 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Starting Balance</span>
-                      <span className="text-zinc-300 font-mono text-sm">${debt.totalBalance.toFixed(2)}</span>
-                    </div>
-                    <div className="flex flex-col border-l border-zinc-800 pl-4">
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Total Deductions</span>
-                      <span className="text-emerald-400 font-mono text-sm">-${totalDeducted.toFixed(2)}</span>
-                    </div>
-                    <div className="flex flex-col border-l border-zinc-800 pl-4 items-end">
-                      <span className="text-[10px] text-purple-400/80 uppercase tracking-wider mb-1 font-bold">Remaining</span>
-                      <span className="text-purple-400 font-mono text-lg font-bold">${remainingBalance.toFixed(2)}</span>
-                    </div>
-                  </div>
+                      {/* Middle Row: The Balance Breakdown */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
+
+                          {/* Starting Balance */}
+                          <div className="flex flex-col">
+                              <span className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Starting Balance</span>
+                              <span className="text-zinc-300 font-mono text-sm">${debt.totalBalance.toFixed(2)}</span>
+                          </div>
+
+                          {/* Total Deductions */}
+                          {/* Added: border-t on mobile, switching to border-l on screens 'sm' and up */}
+                          <div className="flex flex-col border-t sm:border-t-0 sm:border-l border-zinc-800 pt-3 sm:pt-0 sm:pl-4">
+                              <span className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Total Deductions</span>
+                              <span className="text-emerald-400 font-mono text-sm">-${totalDeducted.toFixed(2)}</span>
+                          </div>
+
+                          {/* Remaining */}
+                          {/* Added: border-t on mobile. Changed items-end to sm:items-end so it aligns left on mobile */}
+                          <div className="flex flex-col border-t sm:border-t-0 sm:border-l border-zinc-800 pt-3 sm:pt-0 sm:pl-4 sm:items-end">
+                              <span className="text-[10px] text-purple-400/80 uppercase tracking-wider mb-1 font-bold">Remaining</span>
+                              <span className="text-purple-400 font-mono text-lg font-bold">${remainingBalance.toFixed(2)}</span>
+                          </div>
+
+                      </div>
 
                   {/* Bottom Row: Transaction Mini-Ledger */}
                   {matchingExpenses.length > 0 && (
