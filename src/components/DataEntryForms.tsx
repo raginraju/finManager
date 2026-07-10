@@ -148,6 +148,7 @@ export function DataEntryForms() {
               >
                 <option value="Rent">Rent</option>
                 <option value="Giga">Giga</option>
+                <option value="Gym">Gym</option>
                 <option value="Simba">Simba</option>
                 <option value="PUB">PUB</option>
                 <option value="Tax">Tax</option>

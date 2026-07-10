@@ -152,6 +152,42 @@ export function DebtManager() {
           <div className="p-8 text-center text-zinc-500 text-sm">No global debt accounts configured.</div>
         ) : (
           <div className="divide-y divide-zinc-800">
+            
+        {/* 💡 GRAND TOTAL SUMMARY HEADER */}
+        <div className="p-4 border-b border-zinc-800 bg-zinc-900/40">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xs font-semibold tracking-wider text-zinc-200 uppercase">Master Portfolio Status</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-zinc-950/50 p-3 rounded-lg border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 uppercase block mb-1">Total Paid (Deductions)</span>
+              <span className="text-emerald-400 font-mono font-bold text-lg">
+                ${debts.reduce((sum, debt) => {
+                  const matching = expenses.filter(e => 
+                    e.description.trim().toLowerCase() === debt.name.trim().toLowerCase() || 
+                    e.category.trim().toLowerCase() === debt.name.trim().toLowerCase()
+                  );
+                  return sum + matching.reduce((s, e) => s + Number(e.amount || 0), 0);
+                }, 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="bg-zinc-950/50 p-3 rounded-lg border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 uppercase block mb-1">Total Outstanding</span>
+              <span className="text-purple-400 font-mono font-bold text-lg">
+                ${debts.reduce((sum, debt) => {
+                  const matching = expenses.filter(e => 
+                    e.description.trim().toLowerCase() === debt.name.trim().toLowerCase() || 
+                    e.category.trim().toLowerCase() === debt.name.trim().toLowerCase()
+                  );
+                  const paid = matching.reduce((s, e) => s + Number(e.amount || 0), 0);
+                  return sum + Math.max(0, debt.totalBalance - paid);
+                }, 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+
             {debts.map((debt) => {
               
               const matchingExpenses = expenses.filter(e => {
