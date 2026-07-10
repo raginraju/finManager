@@ -30,7 +30,6 @@ export interface DebtLiability {
   remainingMonths?: number;
 }
 
-// 💡 NEW: Interface for Split Installment Plans (BNPL)
 export interface InstallmentPlan {
   id?: number;
   parentName: string;
@@ -38,6 +37,12 @@ export interface InstallmentPlan {
   totalAmount: number;
   totalMonths: number;
   startingMonth: string;
+}
+export interface StudyLog {
+  id?: number;
+  startTime: string;
+  endTime: string;
+  durationSeconds: number;
 }
 
 export interface MonthMarker {
@@ -77,7 +82,6 @@ const createDatabaseTables = (db: Database) => {
       isFixedInstallment INTEGER NOT NULL
     );
 
-    /* 💡 NEW: Table to store your Split Installment Plans */
     CREATE TABLE IF NOT EXISTS installments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       parentName TEXT NOT NULL,
@@ -87,11 +91,19 @@ const createDatabaseTables = (db: Database) => {
       startingMonth TEXT NOT NULL
     );
 
+    /* 💡 NEW: Table to store study session metrics */
+    CREATE TABLE IF NOT EXISTS study_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      startTime TEXT NOT NULL,
+      endTime TEXT NOT NULL,
+      durationSeconds INTEGER NOT NULL
+    );
+
     /* 💡 HIGH-SPEED PERFORMANCE INDEXES */
-    /* Prevents full table scans when switching months, running analytics, or building list tabs */
     CREATE INDEX IF NOT EXISTS idx_income_monthYear ON income (monthYear);
     CREATE INDEX IF NOT EXISTS idx_expenses_monthYear ON expenses (monthYear);
     CREATE INDEX IF NOT EXISTS idx_debts_monthYear ON debts (monthYear);
+    CREATE INDEX IF NOT EXISTS idx_study_logs_startTime ON study_logs (startTime);
   `);
 };
 
@@ -104,7 +116,6 @@ export const getSQLiteEngine = async (binaryBuffer?: ArrayBuffer): Promise<Datab
 
   if (binaryBuffer) {
     dbInstance = new SQL.Database(new Uint8Array(binaryBuffer));
-    // Ensure indexes exist on imported databases seamlessly without altering your data rows
     createDatabaseTables(dbInstance);
   } else {
     dbInstance = new SQL.Database();
