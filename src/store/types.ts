@@ -1,4 +1,4 @@
-import { type IncomeSource, type Expense, type DebtLiability, type InstallmentPlan, type StudyLog } from '../db';
+import { type IncomeSource, type Expense, type DebtLiability, type StudyLog } from '../db';
 
 export interface InstallmentPlan {
   id: number;
