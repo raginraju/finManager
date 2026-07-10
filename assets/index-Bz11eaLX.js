@@ -27,7 +27,6 @@ import{n as e}from"./rolldown-runtime-Bh1tDfsg.js";import{a as t,i as n,n as r,o
       isFixedInstallment INTEGER NOT NULL
     );
 
-    /* 💡 NEW: Table to store your Split Installment Plans */
     CREATE TABLE IF NOT EXISTS installments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       parentName TEXT NOT NULL,
@@ -37,11 +36,19 @@ import{n as e}from"./rolldown-runtime-Bh1tDfsg.js";import{a as t,i as n,n as r,o
       startingMonth TEXT NOT NULL
     );
 
+    /* 💡 NEW: Table to store study session metrics */
+    CREATE TABLE IF NOT EXISTS study_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      startTime TEXT NOT NULL,
+      endTime TEXT NOT NULL,
+      durationSeconds INTEGER NOT NULL
+    );
+
     /* 💡 HIGH-SPEED PERFORMANCE INDEXES */
-    /* Prevents full table scans when switching months, running analytics, or building list tabs */
     CREATE INDEX IF NOT EXISTS idx_income_monthYear ON income (monthYear);
     CREATE INDEX IF NOT EXISTS idx_expenses_monthYear ON expenses (monthYear);
     CREATE INDEX IF NOT EXISTS idx_debts_monthYear ON debts (monthYear);
+    CREATE INDEX IF NOT EXISTS idx_study_logs_startTime ON study_logs (startTime);
   `)},f=async e=>{if(u&&!e)return u;let t=await(0,l.default)({locateFile:()=>r});return e?(u=new t.Database(new Uint8Array(e)),d(u)):(u=new t.Database,d(u)),u},p=`https://www.googleapis.com/drive/v3/files`,m=`https://www.googleapis.com/upload/drive/v3/files`,h=`wealthmanager`,g=`application/vnd.google-apps.folder`,_=new Map;function v(e){return e.replace(/\\/g,`\\\\`).replace(/'/g,`\\'`)}function y(e){try{let t=e.split(`.`);return t.length===3&&JSON.parse(atob(t[1])).email||null}catch{return null}}async function b(e,t){let n=await fetch(`${p}?q=${encodeURIComponent(t)}&spaces=drive`,{headers:{Authorization:`Bearer ${e}`}});if(!n.ok)throw Error(`Failed querying Google Drive for requested resource.`);let r=await n.json();return r.files.length>0?r.files[0].id:null}async function x(e){let t=y(e)||e;if(_.has(t))return _.get(t);let n=(async()=>{let t=await b(e,`name = '${v(h)}' and mimeType = '${g}' and trashed = false`);if(t)return t;let n=await fetch(p,{method:`POST`,headers:{Authorization:`Bearer ${e}`,"Content-Type":`application/json`},body:JSON.stringify({name:h,mimeType:g})});if(!n.ok)throw Error(`Failed to create Google Drive folder: ${h}`);return(await n.json()).id})();return _.set(t,n),n}async function S(e,t){let n=await x(e);return b(e,`name = '${v(t)}' and '${n}' in parents and trashed = false`)}async function C(e,t){let n=await fetch(`${p}/${t}?alt=media`,{headers:{Authorization:`Bearer ${e}`}});if(!n.ok)throw Error(`Failed to download binary SQLite database from Google Drive.`);return await n.arrayBuffer()}async function w(e,t,n,r){let i=await x(e),a={name:t,mimeType:`application/octet-stream`,...r?{}:{parents:[i]}},o=new FormData;o.append(`metadata`,new Blob([JSON.stringify(a)],{type:`application/json`})),o.append(`file`,new Blob([n],{type:`application/octet-stream`}));let s=r?`${m}/${r}?uploadType=multipart`:`${m}?uploadType=multipart`,c=await fetch(s,{method:r?`PATCH`:`POST`,headers:{Authorization:`Bearer ${e}`},body:o});if(!c.ok)throw Error(`Failed pushing SQLite binary asset to cloud core destination. Status: ${c.status}`);return(await c.json()).id}var T=()=>new Date().toISOString().slice(0,7);function E(e){let[t,n]=e.split(`-`).map(Number),r=new Date(t,n,0);r.setDate(r.getDate()-4);let i=new Date(t,n-1,0);return i.setDate(i.getDate()-4+1),{cycleStart:i,cycleEnd:r}}var D=!1,O=!1,k=n((e,t)=>({income:[],expenses:[],debts:[],installments:[],monthMarkers:[],lastDeletedSnapshot:null,db:null,isHydratedFromCloud:!1,isLoading:!0,gdriveToken:null,selectedMonthYear:T(),availableMonths:[T()],syncStatus:`idle`,lastSyncedAt:null,isHydrating:!1,fetchInitialData:async()=>{if(!D){D=!0,O||e({isLoading:!0,syncStatus:`loading`});try{let n=t().gdriveToken;if(!n&&!O){D=!1,e({isLoading:!1});return}n&&!O&&(await t().pullFromCloud(),e({isHydratedFromCloud:!0})),O=!0;let r=t().db||await f();r.run(`CREATE TABLE IF NOT EXISTS installments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         parentName TEXT,
