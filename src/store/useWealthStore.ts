@@ -12,7 +12,8 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   income: [],
   expenses: [],
   debts: [],
-  installments: [], // 💡 NEW: State for Split Payments
+  installments: [], 
+  studyLogs: [], // 💡 NEW: State for tracked Study Sessions
   monthMarkers: [],
   lastDeletedSnapshot: null,
   db: null,
@@ -51,7 +52,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
       const db = get().db || await getSQLiteEngine();
       
-      // 💡 NEW: Automatically create the Installments table if it doesn't exist
+      // 💡 Ensure all structural application tables exist safely before executing read scans
       db.run(`CREATE TABLE IF NOT EXISTS installments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         parentName TEXT,
@@ -61,17 +62,22 @@ export const useWealthStore = create<WealthState>((set, get) => ({
         startingMonth TEXT
       )`);
 
+      db.run(`CREATE TABLE IF NOT EXISTS study_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        startTime TEXT NOT NULL,
+        endTime TEXT NOT NULL,
+        durationSeconds INTEGER NOT NULL
+      )`);
+
       const activeMonth = get().selectedMonthYear || utils.getNowString();
       
       const incomeRows = db.exec(`SELECT * FROM income WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
-      
-      // 💡 FIXED: Remove WHERE monthYear filter so DebtManager can scan ALL past payments for installments
       const expenseRows = db.exec(`SELECT * FROM expenses`)[0]?.values || [];
-      
       const debtRows = db.exec(`SELECT * FROM debts`)[0]?.values || [];
-      
-      // 💡 NEW: Fetch installments
       const instRows = db.exec(`SELECT * FROM installments`)[0]?.values || [];
+      
+      // 💡 NEW: Read the last 7 items from the metrics database log
+      const studyRows = db.exec(`SELECT * FROM study_logs ORDER BY id DESC LIMIT 7`)[0]?.values || [];
       
       const distinctMonths = db.exec(`SELECT DISTINCT monthYear FROM expenses UNION SELECT DISTINCT monthYear FROM income`)[0]?.values || [];
       const monthsList = distinctMonths
@@ -91,6 +97,10 @@ export const useWealthStore = create<WealthState>((set, get) => ({
         installments: instRows.map((r: any[]) => ({
           id: Number(r[0]), parentName: String(r[1]), name: String(r[2]), totalAmount: Number(r[3]), totalMonths: Number(r[4]), startingMonth: String(r[5])
         })),
+        // 💡 NEW: Map state values cleanly into memory storage array (reversed to maintain chronological order in graphs)
+        studyLogs: studyRows.map((r: any[]) => ({
+          id: Number(r[0]), startTime: String(r[1]), endTime: String(r[2]), durationSeconds: Number(r[3])
+        })).reverse(),
         availableMonths: monthsList.length ? monthsList : [activeMonth],
         isLoading: false,
         syncStatus: 'idle'
@@ -217,7 +227,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     void get().syncWithCloud();
   },
 
-  // 💡 NEW: Installment CRUD Methods
   upsertInstallment: async (payload) => {
     const db = await getSQLiteEngine();
     if (payload.id) {
@@ -238,6 +247,17 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   deleteInstallment: async (id) => {
     const db = await getSQLiteEngine();
     db.run(`DELETE FROM installments WHERE id = ?`, [id]);
+    await get().fetchInitialData();
+    void get().syncWithCloud();
+  },
+
+  // 💡 NEW: Persistent Action to record study logs to SQLite and push changes to Google Drive
+  addStudyLog: async (log) => {
+    const db = await getSQLiteEngine();
+    db.run(
+      `INSERT INTO study_logs (startTime, endTime, durationSeconds) VALUES (?, ?, ?)`,
+      [log.startTime, log.endTime, log.durationSeconds]
+    );
     await get().fetchInitialData();
     void get().syncWithCloud();
   },
@@ -305,13 +325,15 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     db.run(`DELETE FROM expenses`);
     db.run(`DELETE FROM income`);
     db.run(`DELETE FROM debts`);
-    db.run(`DELETE FROM installments`); // 💡 NEW: Clears installments too
+    db.run(`DELETE FROM installments`); 
+    db.run(`DELETE FROM study_logs`); // 💡 NEW: Clear focus metrics logs on global clean reset
 
     set({
       income: [],
       expenses: [],
       debts: [],
-      installments: [], // 💡 NEW: Reset state
+      installments: [], 
+      studyLogs: [], // 💡 NEW: Reset focus vector array metrics
       availableMonths: [utils.getNowString()],
       selectedMonthYear: utils.getNowString()
     });
