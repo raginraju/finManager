@@ -78,7 +78,7 @@ export function DebtManager() {
     await store.deleteInstallment(id);
   };
 
-  // 💡 NEW: Dual Math Engine - Calculates both the Grand Total and the Current Month's Commitment
+  // 💡 NEW: Dual Math Engine - Calculates both the Grand Total and the Current Month's Commitment 
   const { totalSplitRemaining, currentMonthSplitTotal } = installments.reduce((acc, inst) => {
     const validPayments = expenses.filter(e => {
       const desc = (e.description || '').trim().toLowerCase();
