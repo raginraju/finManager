@@ -98,16 +98,20 @@ function App() {
 
   // 💡 SEARCHES GLOBAL 'expenses' ARRAY: Isolates ONLY the food items that fall squarely 
   // inside the active cycle dates, regardless of which month folder they were saved in.
-  const foodTrustCardSpent = expenses
+  const trustCardSpent = expenses
     .filter(e => {
-      if (e.category !== 'Food' || !e.description.includes('(Trust)')) return false;
+      //  Include Food, Util, and Custom categories
+      const isTargetCategory = ['Food', 'Util', 'Custom'].includes(e.category);
+      const isTrustTagged = e.description.includes('(Trust)');
+      
+      if (!isTargetCategory || !isTrustTagged) return false;
 
+      // Extract day from descriptions like "12-1 (Trust)" or "Utility Name (Trust)"
+      // If the description doesn't start with a day number (like "12-"), 
+      // we default to the 1st of the month to ensure it gets counted in the cycle.
       const dayMatch = e.description.match(/^(\d+)-/);
-      if (!dayMatch) return false;
+      const transactionDay = dayMatch ? parseInt(dayMatch[1], 10) : 1;
       
-      const transactionDay = parseInt(dayMatch[1], 10);
-      
-      // Construct date using the item's OWN logged monthYear to bridge boundaries seamlessly
       const [year, month] = e.monthYear.split('-').map(Number);
       const exactTxDate = new Date(year, month - 1, transactionDay);
       
@@ -119,7 +123,7 @@ function App() {
     })
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-  const totalTrustObligationBalance = foodTrustCardSpent;
+  const totalTrustObligationBalance = trustCardSpent;
 
   if (isLoading) {
     return (

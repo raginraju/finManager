@@ -12,6 +12,7 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   income: [],
   expenses: [],
   debts: [],
+  installments: [], // 💡 NEW: State for Split Payments
   monthMarkers: [],
   lastDeletedSnapshot: null,
   db: null,
@@ -49,13 +50,28 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       isAppBooted = true;
 
       const db = get().db || await getSQLiteEngine();
+      
+      // 💡 NEW: Automatically create the Installments table if it doesn't exist
+      db.run(`CREATE TABLE IF NOT EXISTS installments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        parentName TEXT,
+        name TEXT,
+        totalAmount REAL,
+        totalMonths INTEGER,
+        startingMonth TEXT
+      )`);
+
       const activeMonth = get().selectedMonthYear || utils.getNowString();
       
       const incomeRows = db.exec(`SELECT * FROM income WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
-      const expenseRows = db.exec(`SELECT * FROM expenses WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
       
-      // 💡 FIXED 1: Removed WHERE monthYear filter. Debts load globally across all months.
+      // 💡 FIXED: Remove WHERE monthYear filter so DebtManager can scan ALL past payments for installments
+      const expenseRows = db.exec(`SELECT * FROM expenses`)[0]?.values || [];
+      
       const debtRows = db.exec(`SELECT * FROM debts`)[0]?.values || [];
+      
+      // 💡 NEW: Fetch installments
+      const instRows = db.exec(`SELECT * FROM installments`)[0]?.values || [];
       
       const distinctMonths = db.exec(`SELECT DISTINCT monthYear FROM expenses UNION SELECT DISTINCT monthYear FROM income`)[0]?.values || [];
       const monthsList = distinctMonths
@@ -64,29 +80,16 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
       set({
         income: incomeRows.map((r: any[]) => ({
-          id: Number(r[0]),
-          monthYear: String(r[1]),
-          name: String(r[2]),
-          grossAmount: Number(r[3]),
-          netTakeHome: Number(r[4]),
-          updatedAt: new Date(String(r[5]))
+          id: Number(r[0]), monthYear: String(r[1]), name: String(r[2]), grossAmount: Number(r[3]), netTakeHome: Number(r[4]), updatedAt: new Date(String(r[5]))
         })),
         expenses: expenseRows.map((r: any[]) => ({
-          id: Number(r[0]),
-          monthYear: String(r[1]),
-          description: String(r[2]),
-          amount: Number(r[3]),
-          date: String(r[4]),
-          category: String(r[5]),
-          isFixed: Boolean(r[6])
+          id: Number(r[0]), monthYear: String(r[1]), description: String(r[2]), amount: Number(r[3]), date: String(r[4]), category: String(r[5]), isFixed: Boolean(r[6])
         })),
         debts: debtRows.map((r: any[]) => ({
-          id: Number(r[0]),
-          monthYear: String(r[1]),
-          name: String(r[2]),
-          totalBalance: Number(r[3]),
-          monthlyPayment: Number(r[4]),
-          isFixedInstallment: Boolean(r[5])
+          id: Number(r[0]), monthYear: String(r[1]), name: String(r[2]), totalBalance: Number(r[3]), monthlyPayment: Number(r[4]), isFixedInstallment: Boolean(r[5])
+        })),
+        installments: instRows.map((r: any[]) => ({
+          id: Number(r[0]), parentName: String(r[1]), name: String(r[2]), totalAmount: Number(r[3]), totalMonths: Number(r[4]), startingMonth: String(r[5])
         })),
         availableMonths: monthsList.length ? monthsList : [activeMonth],
         isLoading: false,
@@ -214,6 +217,31 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     void get().syncWithCloud();
   },
 
+  // 💡 NEW: Installment CRUD Methods
+  upsertInstallment: async (payload) => {
+    const db = await getSQLiteEngine();
+    if (payload.id) {
+      db.run(
+        `UPDATE installments SET parentName = ?, name = ?, totalAmount = ?, totalMonths = ?, startingMonth = ? WHERE id = ?`,
+        [payload.parentName, payload.name, payload.totalAmount, payload.totalMonths, payload.startingMonth, payload.id]
+      );
+    } else {
+      db.run(
+        `INSERT INTO installments (parentName, name, totalAmount, totalMonths, startingMonth) VALUES (?, ?, ?, ?, ?)`,
+        [payload.parentName, payload.name, payload.totalAmount, payload.totalMonths, payload.startingMonth]
+      );
+    }
+    await get().fetchInitialData();
+    void get().syncWithCloud();
+  },
+
+  deleteInstallment: async (id) => {
+    const db = await getSQLiteEngine();
+    db.run(`DELETE FROM installments WHERE id = ?`, [id]);
+    await get().fetchInitialData();
+    void get().syncWithCloud();
+  },
+
   addMonthYear: async (monthYear, isCopy = false) => {
     const sourceTemplateMonth = get().selectedMonthYear;
 
@@ -228,7 +256,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       try {
         const db = await getSQLiteEngine();
 
-        // 💡 FIXED 2: Only clear income and expenses. Leave global debts alone.
         await db.run(`DELETE FROM income WHERE monthYear = ?`, [monthYear]);
         await db.run(`DELETE FROM expenses WHERE monthYear = ?`, [monthYear]);
 
@@ -246,8 +273,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
           [monthYear, monthYear, sourceTemplateMonth]
         );
 
-        // 💡 DELETED: The debt cloning logic was removed from here.
-
       } catch (err) {
         console.error("Failed to accurately duplicate selected month context configuration:", err);
         alert("A database error occurred while copying the data.");
@@ -261,7 +286,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   deleteMonthYear: async (monthYear) => {
     const db = await getSQLiteEngine();
     
-    // 💡 FIXED 3: Clear out expenses and income, but do NOT delete debts.
     db.run(`DELETE FROM expenses WHERE monthYear = ?`, [monthYear]);
     db.run(`DELETE FROM income WHERE monthYear = ?`, [monthYear]);
 
@@ -281,11 +305,13 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     db.run(`DELETE FROM expenses`);
     db.run(`DELETE FROM income`);
     db.run(`DELETE FROM debts`);
+    db.run(`DELETE FROM installments`); // 💡 NEW: Clears installments too
 
     set({
       income: [],
       expenses: [],
       debts: [],
+      installments: [], // 💡 NEW: Reset state
       availableMonths: [utils.getNowString()],
       selectedMonthYear: utils.getNowString()
     });

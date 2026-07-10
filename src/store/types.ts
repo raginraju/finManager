@@ -1,9 +1,23 @@
 import { type IncomeSource, type Expense, type DebtLiability } from '../db';
 
+// 💡 NEW: Define the Installment interface
+export interface InstallmentPlan {
+  id: number;
+  parentName: string;
+  name: string;
+  totalAmount: number;
+  totalMonths: number;
+  startingMonth: string;
+}
+
 export interface WealthState {
   income: IncomeSource[];
   expenses: Expense[];
   debts: DebtLiability[];
+  
+  // 💡 NEW: Add the installments state array
+  installments: InstallmentPlan[]; 
+  
   monthMarkers: string[];
   db: any;
   isHydratedFromCloud: boolean;
@@ -39,5 +53,10 @@ export interface WealthState {
   deleteExpense: (id: number) => Promise<void>;
   upsertIncome: (income: Omit<IncomeSource, 'id'> & { id?: number }) => Promise<void>;
   upsertDebt: (debt: Omit<DebtLiability, 'id'> & { id?: number }) => Promise<void>;
+  
+  // 💡 NEW: Installment Actions
+  upsertInstallment: (installment: Omit<InstallmentPlan, 'id'> & { id?: number }) => Promise<void>;
+  deleteInstallment: (id: number) => Promise<void>;
+  
   pullFromCloud: () => Promise<void>;
 }

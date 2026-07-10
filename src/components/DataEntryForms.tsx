@@ -17,7 +17,9 @@ export function DataEntryForms() {
   const [subOption, setSubOption] = useState('');
   const [customKey, setCustomKey] = useState('');
   const [foodDay, setFoodDay] = useState(''); 
-  const [foodPaymentMethod, setFoodPaymentMethod] = useState<PaymentMethod>('Debit'); // 💡 Added for tracking food account variants
+  
+  // 💡 GENERALIZED: Now controls payment routing for Food, Util, and Custom!
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Debit'); 
 
   const handleCashSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,24 +31,26 @@ export function DataEntryForms() {
     // 1. Resolve structural description titles depending on context
     if (activeCategory === 'Earn') {
       finalizedKey = customKey || 'Salary';
-    } else if (activeCategory === 'Credit' || activeCategory === 'Util') {
+    } else if (activeCategory === 'Credit') {
       finalizedKey = subOption;
+    } else if (activeCategory === 'Util') {
+      // 💡 NEW: Automatically tags utilities with the selected payment method!
+      finalizedKey = `${subOption} (${paymentMethod})`;
     } else if (activeCategory === 'Custom') {
-      finalizedKey = customKey;
+      // 💡 NEW: Automatically tags custom entries, with a fallback if left blank
+      const safeKey = customKey || 'Custom';
+      finalizedKey = `${safeKey} (${paymentMethod})`;
     } else if (activeCategory === 'Food') {
       const dayInt = parseInt(foodDay) || new Date().getDate();
       
-      // Calculate how many food entries match the day input to handle auto-incrementation
       const matchingFoodCount = expenses.filter(exp => {
         const isCurrentPeriod = exp.monthYear === selectedMonthYear;
         const isFoodType = exp.category === 'Food';
-        // Check if the current description string starts with the designated structural "day-" prefix
         const startsWithDayPattern = exp.description.startsWith(`${dayInt}-`);
         return isCurrentPeriod && isFoodType && startsWithDayPattern;
       }).length;
 
-      // 💡 Suffix format includes account source tags safely inside description metrics
-      finalizedKey = `${dayInt}-${matchingFoodCount + 1} (${foodPaymentMethod})`;
+      finalizedKey = `${dayInt}-${matchingFoodCount + 1} (${paymentMethod})`;
     }
 
     if (!finalizedKey) return;
@@ -71,13 +75,12 @@ export function DataEntryForms() {
       });
     }
 
-    // Clean inputs up cleanly, maintaining segment selection for high-frequency logs
+    // Clean inputs up cleanly
     setCashAmount('');
     setCustomKey('');
     setFoodDay('');
   };
 
-  // Re-synchronize structural default select dropdown strings when toggling options
   const handleCategoryChange = (option: LogCategory) => {
     setActiveCategory(option);
     if (option === 'Credit') setSubOption('Credit Card');
@@ -90,7 +93,7 @@ export function DataEntryForms() {
       <h3 className="text-xs font-semibold tracking-wider text-zinc-200 uppercase">Log Cash</h3>
       <form onSubmit={handleCashSubmit} className="space-y-4">
         
-        {/* 💡 STEP 1: Segmented Options Moved On Top */}
+        {/* STEP 1: Segmented Options */}
         <div className="grid grid-cols-5 gap-1 p-1 bg-zinc-950 border border-zinc-900 rounded-lg">
           {(['Earn', 'Food', 'Util', 'Credit', 'Custom'] as LogCategory[]).map((option) => {
             const isSelected = activeCategory === option;
@@ -114,9 +117,9 @@ export function DataEntryForms() {
           })}
         </div>
 
-        {/* 💡 STEP 2: Conditional Sub-Options & Custom Keys Rendering Panels */}
+        {/* STEP 2: Conditional Sub-Options & Custom Keys Rendering Panels */}
         
-        {/* CREDIT Sub-Options Configuration Grid dropdown */}
+        {/* CREDIT */}
         {activeCategory === 'Credit' && (
           <div className="space-y-1">
             <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Account Source</label>
@@ -133,25 +136,38 @@ export function DataEntryForms() {
           </div>
         )}
 
-        {/* UTILITIES Sub-Options Layout parameters */}
+        {/* UTILITIES - 💡 Now a 2-column grid with Payment Via */}
         {activeCategory === 'Util' && (
-          <div className="space-y-1">
-            <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Utility Target</label>
-            <select
-              value={subOption}
-              onChange={(e) => setSubOption(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
-            >
-              <option value="Rent">Rent</option>
-              <option value="Giga">Giga</option>
-              <option value="Simba">Simba</option>
-              <option value="PUB">PUB</option>
-              <option value="Tax">Tax</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Utility Target</label>
+              <select
+                value={subOption}
+                onChange={(e) => setSubOption(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
+              >
+                <option value="Rent">Rent</option>
+                <option value="Giga">Giga</option>
+                <option value="Simba">Simba</option>
+                <option value="PUB">PUB</option>
+                <option value="Tax">Tax</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Payment Via</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
+              >
+                <option value="Debit">Debit Card</option>
+                <option value="Trust">Trust Card</option>
+              </select>
+            </div>
           </div>
         )}
 
-        {/* 💡 FOOD SELECTION LAYOUT: Prompts for both Day and Payment Method */}
+        {/* FOOD */}
         {activeCategory === 'Food' && (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -169,8 +185,8 @@ export function DataEntryForms() {
             <div className="space-y-1">
               <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Payment Via</label>
               <select
-                value={foodPaymentMethod}
-                onChange={(e) => setFoodPaymentMethod(e.target.value as PaymentMethod)}
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
               >
                 <option value="Debit">Debit Card</option>
@@ -180,23 +196,48 @@ export function DataEntryForms() {
           </div>
         )}
 
-        {/* CUSTOM / EARN Key Manual Input Fields */}
-        {(activeCategory === 'Custom' || activeCategory === 'Earn') && (
+        {/* EARN (Separated from Custom to remove the Payment option) */}
+        {activeCategory === 'Earn' && (
           <div className="space-y-1">
-            <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">
-              {activeCategory === 'Earn' ? 'Inflow Description (Optional)' : 'Custom Identifier'}
-            </label>
+            <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Inflow Description (Optional)</label>
             <input
               type="text"
               value={customKey}
               onChange={(e) => setCustomKey(e.target.value)}
-              placeholder={activeCategory === 'Earn' ? 'Salary' : 'Enter custom label...'}
+              placeholder="Salary"
               className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
             />
           </div>
         )}
 
-        {/* Standard Numeric Value field parameter wrapper */}
+        {/* CUSTOM - 💡 Now a 2-column grid with Payment Via */}
+        {activeCategory === 'Custom' && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Custom Identifier</label>
+              <input
+                type="text"
+                value={customKey}
+                onChange={(e) => setCustomKey(e.target.value)}
+                placeholder="Enter label..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Payment Via</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-md p-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
+              >
+                <option value="Debit">Debit Card</option>
+                <option value="Trust">Trust Card</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Amount Input */}
         <div className="space-y-1">
           <label className="text-[10px] font-medium tracking-wide text-zinc-500 uppercase block">Amount ($)</label>
           <input
@@ -209,7 +250,6 @@ export function DataEntryForms() {
           />
         </div>
 
-        {/* Form Submission Action Button Trigger */}
         <button 
           type="submit" 
           className={`w-full py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 rounded-md text-xs font-medium ${PRESSABLE_CLASS} cursor-pointer shadow-sm mt-2`}
