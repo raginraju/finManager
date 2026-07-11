@@ -67,6 +67,7 @@ export interface WealthState {
   deleteInstallment: (id: number) => Promise<void>;
   
   addStudyLog: (log: Omit<StudyLog, 'id'>) => Promise<void>;
+  clearStudyLogs: () => Promise<void>;
 
   addGymExercise: (exercise: Omit<GymExercise, 'id'>) => Promise<void>;
   addGymLog: (log: Omit<GymLog, 'id'>) => Promise<void>;

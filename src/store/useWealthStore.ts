@@ -297,6 +297,13 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     void get().syncWithCloud();
   },
 
+  clearStudyLogs: async () => {
+    const db = await getSQLiteEngine();
+    db.run(`DELETE FROM study_logs`);
+    await get().fetchInitialData();
+    void get().syncWithCloud(true); // Force push updated empty schema state matrix
+  },
+
   // 💡 NEW: GYM TRANSACTION OPERATION MUTATORS
   addGymExercise: async (exercise) => {
     const db = await getSQLiteEngine();
