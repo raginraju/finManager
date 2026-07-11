@@ -71,6 +71,8 @@ export interface WealthState {
 
   addGymExercise: (exercise: Omit<GymExercise, 'id'>) => Promise<void>;
   addGymLog: (log: Omit<GymLog, 'id'>) => Promise<void>;
+  clearGymLogs: () => Promise<void>;
+  clearGymExercises: () => Promise<void>;
   deleteGymLog: (id: number) => Promise<void>;
   
   pullFromCloud: () => Promise<void>;
