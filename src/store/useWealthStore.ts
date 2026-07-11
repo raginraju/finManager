@@ -13,7 +13,9 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   expenses: [],
   debts: [],
   installments: [], 
-  studyLogs: [], // 💡 NEW: State for tracked Study Sessions
+  studyLogs: [], 
+  gymExercises: [], // 💡 Hydrated state catalog layout array
+  gymLogs: [],      // 💡 Hydrated workout entry feed array
   monthMarkers: [],
   lastDeletedSnapshot: null,
   db: null,
@@ -69,15 +71,43 @@ export const useWealthStore = create<WealthState>((set, get) => ({
         durationSeconds INTEGER NOT NULL
       )`);
 
+      db.run(`CREATE TABLE IF NOT EXISTS gym_exercises (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        category TEXT NOT NULL, 
+        name TEXT NOT NULL
+      )`);
+
+      db.run(`CREATE TABLE IF NOT EXISTS gym_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        date TEXT NOT NULL, 
+        category TEXT NOT NULL,
+        exerciseName TEXT NOT NULL, 
+        weight REAL NOT NULL, 
+        sets INTEGER NOT NULL, 
+        reps INTEGER NOT NULL, 
+        note TEXT
+      )`);
+
+      // 💡 Seed starting exercise library lookup catalog rows if freshly initialized empty
+      const checkCount = db.exec("SELECT COUNT(*) FROM gym_exercises")[0]?.values[0][0];
+      if (Number(checkCount) === 0) {
+        db.run(`INSERT INTO gym_exercises (category, name) VALUES 
+          ('Push', 'Bench Press'), ('Push', 'Overhead Press'),
+          ('Pull', 'Barbell Row'), ('Pull', 'Lat Pulldown'),
+          ('Legs', 'Squat'), ('Legs', 'Romanian Deadlift')`);
+      }
+
       const activeMonth = get().selectedMonthYear || utils.getNowString();
       
       const incomeRows = db.exec(`SELECT * FROM income WHERE monthYear = '${activeMonth}'`)[0]?.values || [];
       const expenseRows = db.exec(`SELECT * FROM expenses`)[0]?.values || [];
       const debtRows = db.exec(`SELECT * FROM debts`)[0]?.values || [];
       const instRows = db.exec(`SELECT * FROM installments`)[0]?.values || [];
-      
-      // 💡 NEW: Read the last 7 items from the metrics database log
       const studyRows = db.exec(`SELECT * FROM study_logs ORDER BY id DESC LIMIT 7`)[0]?.values || [];
+      
+      // 💡 READ NEW GYM DATA ROWS FROM SQLITE
+      const exRows = db.exec("SELECT * FROM gym_exercises ORDER BY name ASC")[0]?.values || [];
+      const gymLogRows = db.exec("SELECT * FROM gym_logs ORDER BY date DESC, id DESC")[0]?.values || [];
       
       const distinctMonths = db.exec(`SELECT DISTINCT monthYear FROM expenses UNION SELECT DISTINCT monthYear FROM income`)[0]?.values || [];
       const monthsList = distinctMonths
@@ -97,10 +127,19 @@ export const useWealthStore = create<WealthState>((set, get) => ({
         installments: instRows.map((r: any[]) => ({
           id: Number(r[0]), parentName: String(r[1]), name: String(r[2]), totalAmount: Number(r[3]), totalMonths: Number(r[4]), startingMonth: String(r[5])
         })),
-        // 💡 NEW: Map state values cleanly into memory storage array (reversed to maintain chronological order in graphs)
         studyLogs: studyRows.map((r: any[]) => ({
           id: Number(r[0]), startTime: String(r[1]), endTime: String(r[2]), durationSeconds: Number(r[3])
         })).reverse(),
+        
+        // 💡 HYDRATE GYM ARRAYS CLEANLY INTO REACT MEMORY MATRIX
+        gymExercises: exRows.map((r: any[]) => ({ 
+          id: Number(r[0]), category: String(r[1]) as any, name: String(r[2]) 
+        })),
+        gymLogs: gymLogRows.map((r: any[]) => ({
+          id: Number(r[0]), date: String(r[1]), category: String(r[2]) as any, exerciseName: String(r[3]),
+          weight: Number(r[4]), sets: Number(r[5]), reps: Number(r[6]), note: r[7] ? String(r[7]) : undefined
+        })),
+
         availableMonths: monthsList.length ? monthsList : [activeMonth],
         isLoading: false,
         syncStatus: 'idle'
@@ -185,7 +224,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
       `INSERT INTO expenses (monthYear, description, amount, date, category, isFixed) VALUES (?, ?, ?, ?, ?, ?)`,
       [expense.monthYear, expense.description, expense.amount, expense.date, expense.category, expense.isFixed ? 1 : 0]
     );
-    
     await get().fetchInitialData(); 
     void get().syncWithCloud();
   },
@@ -193,7 +231,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
   deleteExpense: async (id) => {
     const db = await getSQLiteEngine();
     db.run(`DELETE FROM expenses WHERE id = ?`, [id]);
-    
     await get().fetchInitialData();
     void get().syncWithCloud();
   },
@@ -205,7 +242,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     } else {
       db.run(`INSERT INTO income (monthYear, name, grossAmount, netTakeHome, updatedAt) VALUES (?, ?, ?, ?, ?)`, [payload.monthYear, payload.name, payload.grossAmount, payload.netTakeHome, new Date().toISOString()]);
     }
-    
     await get().fetchInitialData();
     void get().syncWithCloud();
   },
@@ -251,13 +287,37 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     void get().syncWithCloud();
   },
 
-  // 💡 NEW: Persistent Action to record study logs to SQLite and push changes to Google Drive
   addStudyLog: async (log) => {
     const db = await getSQLiteEngine();
     db.run(
       `INSERT INTO study_logs (startTime, endTime, durationSeconds) VALUES (?, ?, ?)`,
       [log.startTime, log.endTime, log.durationSeconds]
     );
+    await get().fetchInitialData();
+    void get().syncWithCloud();
+  },
+
+  // 💡 NEW: GYM TRANSACTION OPERATION MUTATORS
+  addGymExercise: async (exercise) => {
+    const db = await getSQLiteEngine();
+    db.run(`INSERT INTO gym_exercises (category, name) VALUES (?, ?)`, [exercise.category, exercise.name]);
+    await get().fetchInitialData();
+    void get().syncWithCloud();
+  },
+
+  addGymLog: async (log) => {
+    const db = await getSQLiteEngine();
+    db.run(
+      `INSERT INTO gym_logs (date, category, exerciseName, weight, sets, reps, note) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [log.date, log.category, log.exerciseName, log.weight, log.sets, log.reps, log.note || null]
+    );
+    await get().fetchInitialData();
+    void get().syncWithCloud();
+  },
+
+  deleteGymLog: async (id) => {
+    const db = await getSQLiteEngine();
+    db.run(`DELETE FROM gym_logs WHERE id = ?`, [id]);
     await get().fetchInitialData();
     void get().syncWithCloud();
   },
@@ -305,7 +365,6 @@ export const useWealthStore = create<WealthState>((set, get) => ({
 
   deleteMonthYear: async (monthYear) => {
     const db = await getSQLiteEngine();
-    
     db.run(`DELETE FROM expenses WHERE monthYear = ?`, [monthYear]);
     db.run(`DELETE FROM income WHERE monthYear = ?`, [monthYear]);
 
@@ -326,14 +385,18 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     db.run(`DELETE FROM income`);
     db.run(`DELETE FROM debts`);
     db.run(`DELETE FROM installments`); 
-    db.run(`DELETE FROM study_logs`); // 💡 NEW: Clear focus metrics logs on global clean reset
+    db.run(`DELETE FROM study_logs`); 
+    db.run(`DELETE FROM gym_exercises`); // 💡 NEW: Clean workout catalog metrics logs
+    db.run(`DELETE FROM gym_logs`);      // 💡 NEW: Clean recorded training performance rows
 
     set({
       income: [],
       expenses: [],
       debts: [],
       installments: [], 
-      studyLogs: [], // 💡 NEW: Reset focus vector array metrics
+      studyLogs: [], 
+      gymExercises: [], // 💡 NEW: Reset exercise options array
+      gymLogs: [],      // 💡 NEW: Reset data matrix tracking layers
       availableMonths: [utils.getNowString()],
       selectedMonthYear: utils.getNowString()
     });

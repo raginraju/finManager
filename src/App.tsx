@@ -11,9 +11,9 @@ import { UndoSnackbar } from './components/UndoSnackbar';
 import { PRESSABLE_SOFT_CLASS } from './util/pressable';
 import { calculateTrustBillingCycle } from './store/helpers'; 
 
-// 💡 NEW IMPORTS FOR TABS
 import { StudyTracker } from './components/StudyTracker';
 import { DebtManager } from './components/DebtManager';
+import { GymTracker } from './components/GymTracker';
 
 // Expose to console for debugging
 if (typeof window !== 'undefined') {
@@ -41,8 +41,8 @@ function App() {
     debts
   } = useWealthStore();
 
-  // 💡 NEW STATE: Tab Routing
-  const [activeTab, setActiveTab] = useState<'ledger' | 'study' | 'debts'>('ledger');
+  // 💡 FIXED: Updated Tab Routing signature to include 'gym'
+  const [activeTab, setActiveTab] = useState<'ledger' | 'study' | 'debts' | 'gym'>('ledger');
 
   // Modal Control State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -96,19 +96,13 @@ function App() {
   const cycleStartLabel = formatDateLabel(trustCycle.cycleStart);
   const cycleEndLabel = formatDateLabel(trustCycle.cycleEnd);
 
-  // 💡 SEARCHES GLOBAL 'expenses' ARRAY: Isolates ONLY the food items that fall squarely 
-  // inside the active cycle dates, regardless of which month folder they were saved in.
   const trustCardSpent = expenses
     .filter(e => {
-      //  Include Food, Util, and Custom categories
       const isTargetCategory = ['Food', 'Util', 'Custom'].includes(e.category);
       const isTrustTagged = e.description.includes('(Trust)');
       
       if (!isTargetCategory || !isTrustTagged) return false;
 
-      // Extract day from descriptions like "12-1 (Trust)" or "Utility Name (Trust)"
-      // If the description doesn't start with a day number (like "12-"), 
-      // we default to the 1st of the month to ensure it gets counted in the cycle.
       const dayMatch = e.description.match(/^(\d+)-/);
       const transactionDay = dayMatch ? parseInt(dayMatch[1], 10) : 1;
       
@@ -205,6 +199,17 @@ function App() {
           >
             Study Tracker
           </button>
+          {/* 💡 NEW: Gym Progress Tab Option Selector */}
+          <button
+            onClick={() => setActiveTab('gym')}
+            className={`px-5 py-2 text-xs md:text-sm font-medium rounded-full transition-all ${
+              activeTab === 'gym' 
+                ? 'bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20' 
+                : 'bg-zinc-900/80 text-zinc-400 hover:text-amber-300 border border-transparent hover:border-amber-900/50 hover:bg-zinc-900'
+            }`}
+          >
+            Gym Progress
+          </button>
         </div>
 
         {/* ==========================================================================
@@ -214,6 +219,8 @@ function App() {
           <StudyTracker />
         ) : activeTab === 'debts' ? (
           <DebtManager />
+        ) : activeTab === 'gym' ? (
+          <GymTracker />
         ) : (
           <div className="grid gap-6 md:grid-cols-4 items-start">
             <AccountingPeriodsNav
@@ -234,7 +241,7 @@ function App() {
                 remainingSurplus={remainingSurplus}
               />
 
-              {/* 💡 Trust Card Balance Sub-Ledger Panel with Cycle Date Parameters */}
+              {/* Trust Card Balance Sub-Ledger Panel */}
               {totalTrustObligationBalance > 0 && (
                 <div className="rounded-xl border border-blue-500/10 bg-blue-500/5 px-4 py-2.5 flex flex-col sm:flex-row gap-1 sm:gap-0 justify-between sm:items-center text-xs">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">

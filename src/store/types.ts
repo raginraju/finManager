@@ -1,4 +1,11 @@
-import { type IncomeSource, type Expense, type DebtLiability, type StudyLog } from '../db';
+import { 
+  type IncomeSource, 
+  type Expense, 
+  type DebtLiability, 
+  type StudyLog, 
+  type GymLog,
+  type GymExercise, 
+} from '../db';
 
 export interface InstallmentPlan {
   id: number;
@@ -16,6 +23,9 @@ export interface WealthState {
   installments: InstallmentPlan[]; 
   
   studyLogs: StudyLog[];
+
+  gymExercises: GymExercise[];
+  gymLogs: GymLog[];
   
   monthMarkers: string[];
   db: any;
@@ -57,6 +67,10 @@ export interface WealthState {
   deleteInstallment: (id: number) => Promise<void>;
   
   addStudyLog: (log: Omit<StudyLog, 'id'>) => Promise<void>;
+
+  addGymExercise: (exercise: Omit<GymExercise, 'id'>) => Promise<void>;
+  addGymLog: (log: Omit<GymLog, 'id'>) => Promise<void>;
+  deleteGymLog: (id: number) => Promise<void>;
   
   pullFromCloud: () => Promise<void>;
 }

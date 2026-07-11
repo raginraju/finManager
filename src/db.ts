@@ -45,6 +45,23 @@ export interface StudyLog {
   durationSeconds: number;
 }
 
+export interface GymExercise {
+  id?: number;
+  category: 'Push' | 'Pull' | 'Legs';
+  name: string;
+}
+
+export interface GymLog {
+  id?: number;
+  date: string;          // YYYY-MM-DD
+  category: 'Push' | 'Pull' | 'Legs';
+  exerciseName: string;
+  weight: number;
+  sets: number;
+  reps: number;
+  note?: string;
+}
+
 export interface MonthMarker {
   monthYear: string;
 }
@@ -91,7 +108,7 @@ const createDatabaseTables = (db: Database) => {
       startingMonth TEXT NOT NULL
     );
 
-    /* 💡 NEW: Table to store study session metrics */
+    /* Table to store study session metrics */
     CREATE TABLE IF NOT EXISTS study_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       startTime TEXT NOT NULL,
@@ -99,11 +116,29 @@ const createDatabaseTables = (db: Database) => {
       durationSeconds INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS gym_exercises (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      name TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS gym_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      category TEXT NOT NULL,
+      exerciseName TEXT NOT NULL,
+      weight REAL NOT NULL,
+      sets INTEGER NOT NULL,
+      reps INTEGER NOT NULL,
+      note TEXT
+    );
+
     /* 💡 HIGH-SPEED PERFORMANCE INDEXES */
     CREATE INDEX IF NOT EXISTS idx_income_monthYear ON income (monthYear);
     CREATE INDEX IF NOT EXISTS idx_expenses_monthYear ON expenses (monthYear);
     CREATE INDEX IF NOT EXISTS idx_debts_monthYear ON debts (monthYear);
     CREATE INDEX IF NOT EXISTS idx_study_logs_startTime ON study_logs (startTime);
+    CREATE INDEX IF NOT EXISTS idx_gym_logs_date ON gym_logs (date);
   `);
 };
 
