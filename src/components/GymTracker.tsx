@@ -6,7 +6,15 @@ import { type GymLog } from '../db';
 type WorkoutCategory = 'Push' | 'Pull' | 'Legs';
 
 export function GymTracker() {
-  const { gymExercises, gymLogs, addGymExercise, addGymLog, deleteGymLog } = useWealthStore();
+  const { 
+    gymExercises, 
+    gymLogs, 
+    addGymExercise, 
+    addGymLog, 
+    deleteGymLog,
+    clearGymExercises, 
+    clearGymLogs 
+  } = useWealthStore();
 
   // Core Form Management
   const [selectedCategory, setSelectedCategory] = useState<WorkoutCategory>('Push');
@@ -256,6 +264,47 @@ export function GymTracker() {
               Log Active Set
             </button>
           </form>
+
+          {/* ==========================================================================
+              💡 RECONCILIATION / DATA CLEANUP PANEL (HIDDEN IF NO ARRAYS EXIST)
+              ========================================================================== */}
+          {(gymExercises.length > 0 || gymLogs.length > 0) && (
+            <div className="pt-4 mt-2 border-t border-zinc-800/80 space-y-2.5">
+              <p className="text-[10px] font-black tracking-widest text-zinc-600 uppercase">Test Sandbox Controls</p>
+              <div className="grid grid-cols-2 gap-2">
+                
+                {gymLogs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm("Purge all recorded lifting log history matrix streams?")) {
+                        await clearGymLogs();
+                      }
+                    }}
+                    className="py-2.5 px-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold rounded-xl transition-all uppercase tracking-wide cursor-pointer text-center"
+                  >
+                    Clear Logs ({gymLogs.length})
+                  </button>
+                )}
+
+                {gymExercises.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm("Completely scrub the Custom Movement Catalog lists clean?")) {
+                        await clearGymExercises();
+                      }
+                    }}
+                    className="py-2.5 px-3 bg-zinc-950 hover:bg-zinc-900 text-zinc-400 border border-zinc-800 text-xs font-bold rounded-xl transition-all uppercase tracking-wide cursor-pointer text-center"
+                  >
+                    Clear Catalog
+                  </button>
+                )}
+
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -275,7 +324,7 @@ export function GymTracker() {
             return (
               <div key={dateStr} className="border border-zinc-800 bg-zinc-900/20 rounded-2xl overflow-hidden shadow-md">
                 
-                {/* 💡 FLEXIBLE GROUP HEADER PANEL */}
+                {/* FLEXIBLE GROUP HEADER PANEL */}
                 <div className="p-4 bg-zinc-900/60 border-b border-zinc-800/80 flex justify-between items-center gap-2">
                   <button 
                     onClick={() => toggleDateGroup(dateStr)}
@@ -292,7 +341,7 @@ export function GymTracker() {
                     </span>
                   </button>
 
-                  {/* 💡 COPY TO TODAY BUTTON TASK DISPATCHER */}
+                  {/* COPY TO TODAY BUTTON TASK DISPATCHER */}
                   {!isToday && (
                     <button
                       onClick={() => handleCopyDayToToday(dateStr)}
@@ -304,7 +353,7 @@ export function GymTracker() {
                   )}
                 </div>
 
-                {/* 💡 COLLAPSIBLE FEED GROUP */}
+                {/* COLLAPSIBLE FEED GROUP */}
                 {isExpanded && (
                   <div className="divide-y divide-zinc-900 bg-zinc-950/20">
                     {dayLogs.map((log) => {
@@ -326,7 +375,7 @@ export function GymTracker() {
                               <h4 className="text-base font-bold text-zinc-200 truncate">{log.exerciseName}</h4>
                             </div>
 
-                            {/* 💡 CONDITIONAL INLINE EDITING INTERFACE FORM LAYER */}
+                            {/* CONDITIONAL INLINE EDITING INTERFACE FORM LAYER */}
                             {isEditing ? (
                               <div className="grid grid-cols-3 gap-2 max-w-xs pt-1.5">
                                 <input 

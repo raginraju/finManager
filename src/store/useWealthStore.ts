@@ -329,6 +329,21 @@ export const useWealthStore = create<WealthState>((set, get) => ({
     void get().syncWithCloud();
   },
 
+  clearGymExercises: async () => {
+    const db = await getSQLiteEngine();
+    db.run(`DELETE FROM gym_exercises`);
+    await get().fetchInitialData();
+    void get().syncWithCloud(true); // Push clear mapping back up to Drive
+  },
+
+  // 💡 Purge historical recorded sets/logs data arrays cleanly
+  clearGymLogs: async () => {
+    const db = await getSQLiteEngine();
+    db.run(`DELETE FROM gym_logs`);
+    await get().fetchInitialData();
+    void get().syncWithCloud(true);
+  },
+
   addMonthYear: async (monthYear, isCopy = false) => {
     const sourceTemplateMonth = get().selectedMonthYear;
 
